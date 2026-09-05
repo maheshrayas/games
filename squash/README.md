@@ -50,6 +50,23 @@ implement a fake version, players here pass through each other. This is the
 same compromise every squash video game makes, and the in-game rules panel says
 so plainly rather than implying the simulation is complete.
 
+## The players
+
+Drawn as small upright figures standing on the court: legs that cycle with the
+distance actually covered, a body that turns to face where you're going (or
+watches the ball when you're still), and a racket that winds up behind and
+sweeps through a real arc on contact, trailing the swing path.
+
+The court stays top-down because that is what makes the service quarters, the
+short line and court position readable. But a figure drawn flat from directly
+overhead is just a head and shoulders and doesn't read as a person at all — so
+the floor is seen from above while the body is drawn standing up from its own
+feet. Old top-down sports games made the same compromise for the same reason.
+
+The racket orbits the body in the *court* plane, squashed vertically to match
+the viewing angle, so a forehand across the court sweeps across the court rather
+than across the screen.
+
 ## Controls
 
 - **Player 1** — `WASD` to move, `Space` to hit (hold it to lob)

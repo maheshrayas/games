@@ -221,7 +221,7 @@ function newState(mode){
     pts:[0,0], games:[0,0], gameNo:1, server:0, box:0, // box 0=right,1=left
     striker:0, floorB:0, frontOK:false, lastHitBy:-1, serveShot:false,
     streak:0, best:0, msg:'', msgOk:false, deadT:0,
-    P:[{x:C.W*.5,y:6.6,vx:0,vy:0,sw:0,cool:0},{x:C.W*.5,y:3.2,vx:0,vy:0,sw:0,cool:0}],
+    P:[{x:C.W*.5,y:6.6,vx:0,vy:0,sw:0,cool:0,phase:0,face:-Math.PI/2,lob:false},{x:C.W*.5,y:3.2,vx:0,vy:0,sw:0,cool:0,phase:0,face:-Math.PI/2,lob:false}],
     B:{x:0,y:0,z:0,vx:0,vy:0,vz:0,live:false}};
 }
 
@@ -272,7 +272,7 @@ function swing(i,lob){
   if(d>REACH||b.z>MAX_REACH_H) return;
   if(S.floorB>1) return;
 
-  p.cool=.22; p.sw=.13;
+  p.cool=.22; p.sw=.16; p.lob=lob;
   const aim=(p.vx/5)*.55 + (Math.random()-.5)*.22;   // your movement steers it
   const t=lob?BALL().lob:BALL().drive;
   const tz=lob?3.3:C.TIN+.35+Math.random()*.85;
@@ -285,7 +285,7 @@ function cpuSwing(i){
   const p=S.P[i],b=S.B,c=S.cpu;
   if(p.cool>0||S.lastHitBy===i) return;
   if(Math.hypot(b.x-p.x,b.y-p.y)>c.reach||b.z>MAX_REACH_H||S.floorB>1) return;
-  p.cool=.22; p.sw=.13;
+  p.cool=.22; p.sw=.16; p.lob=lob;
   const bad=Math.random()<c.err;                   // sometimes finds the tin or the out line
   const lob=Math.random()<.22;
   const t=lob?BALL().lob:BALL().drive;
@@ -394,11 +394,97 @@ function stepPlayers(dt){
     p.vx=dx/m*s; p.vy=dy/m*s;
     p.x=Math.max(.25,Math.min(C.W-.25,p.x+p.vx*dt));
     p.y=Math.max(.25,Math.min(C.L-.25,p.y+p.vy*dt));
+
+    // Legs cycle with distance covered, so the run reads as a run rather than
+    // a fixed animation playing at a constant rate.
+    const sp2=Math.hypot(p.vx,p.vy);
+    p.phase+=sp2*dt*2.7;
+    // Face where you're going; when standing, watch the ball.
+    const tgt = sp2>.35 ? Math.atan2(p.vy,p.vx)
+                        : Math.atan2(S.B.y-p.y, S.B.x-p.x);
+    let df=tgt-p.face;
+    while(df>Math.PI)df-=2*Math.PI; while(df<-Math.PI)df+=2*Math.PI;
+    p.face+=df*Math.min(1,dt*9);
   }
   if(!solo()&&S.mode!=='human'&&S.phase==='rally') cpuSwing(1);
 }
 
 // ── render ─────────────────────────────────────────────────────────────────
+// Kits, so the two players read apart at a glance without needing numbers.
+const KIT=[{shirt:'#2C6E9B',shorts:'#1B4763',skin:'#E3B189',hair:'#3A2B22'},
+           {shirt:'#C4552E',shorts:'#8A3A1E',skin:'#B87B4E',hair:'#20160F'}];
+
+/**
+ * A player, drawn as a small upright figure standing on the court.
+ *
+ * The court stays top-down because that is what makes the service quarters and
+ * court position readable, but a figure drawn flat from directly overhead is
+ * just a head and shoulders — unreadable as a person. So the floor is seen from
+ * above while the body is drawn standing up from its own feet: the same
+ * compromise old top-down sports games make, and it reads instantly.
+ *
+ * The racket orbits the body in the COURT plane (squashed vertically to match
+ * the viewing angle) rather than the screen plane, so a forehand across the
+ * court sweeps across the court.
+ */
+function drawPlayer(i,p){
+  const fx=mx(p.x), fy=my(p.y), k=KIT[i];
+  const moving=Math.hypot(p.vx,p.vy)>.4;
+  const stride=moving?Math.sin(p.phase)*4.2:0;
+  const bob=moving?Math.abs(Math.cos(p.phase))*1.2:0;
+  const hipY=fy-11-bob, shY=fy-19-bob, headY=fy-25.5-bob;
+
+  // Your reach — the single most useful thing to see while learning.
+  ctx.globalAlpha=.09; ctx.fillStyle=k.shirt;
+  ctx.beginPath(); ctx.arc(fx,fy,REACH*PPM,0,7); ctx.fill(); ctx.globalAlpha=1;
+
+  ctx.globalAlpha=.26; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(fx,fy,8.5,3.4,0,0,7); ctx.fill(); ctx.globalAlpha=1;
+
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.strokeStyle=k.shorts; ctx.lineWidth=3.6;               // legs
+  ctx.beginPath();
+  ctx.moveTo(fx,hipY); ctx.lineTo(fx-(moving?stride:2.6),fy);
+  ctx.moveTo(fx,hipY); ctx.lineTo(fx+(moving?stride:2.6),fy);
+  ctx.stroke();
+
+  ctx.fillStyle=k.shirt;                                      // torso
+  ctx.beginPath(); ctx.ellipse(fx,(shY+hipY)/2,5.4,(hipY-shY)/2+2.2,0,0,7); ctx.fill();
+
+  // ── racket arm ──
+  const prog = p.sw>0 ? 1-p.sw/.16 : 0;                       // 0..1 through the swing
+  const rest = p.face + (p.lob?.5:.2);
+  const th   = p.sw>0 ? rest-1.7+prog*2.9                     // wind up behind, sweep through
+                      : rest + Math.sin(p.phase*.5)*.12;
+  const R    = 12 + (p.sw>0 ? Math.sin(prog*Math.PI)*6 : 0);
+  const ax=fx+Math.cos(th)*R, ay=shY+2+Math.sin(th)*R*.52;
+
+  if(p.sw>0){                                                 // swing arc
+    ctx.globalAlpha=.30*(1-prog); ctx.strokeStyle=k.shirt; ctx.lineWidth=2.4;
+    ctx.beginPath(); ctx.ellipse(fx,shY+2,R,R*.52,0,rest-1.7,th); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  ctx.strokeStyle=k.skin; ctx.lineWidth=2.6;                  // arm
+  ctx.beginPath(); ctx.moveTo(fx,shY+3); ctx.lineTo(ax,ay); ctx.stroke();
+
+  const hx=fx+Math.cos(th)*(R+8), hy=shY+2+Math.sin(th)*(R+8)*.52;
+  ctx.strokeStyle='#2B2B2B'; ctx.lineWidth=1.8;               // racket throat
+  ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(hx,hy); ctx.stroke();
+  ctx.save();                                                 // racket head
+  ctx.translate(hx,hy); ctx.rotate(th);
+  ctx.strokeStyle='#2B2B2B'; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.ellipse(0,0,6.2,4.4,0,0,7); ctx.stroke();
+  ctx.globalAlpha=.5; ctx.lineWidth=.5; ctx.strokeStyle='#fff';
+  for(let g=-4;g<=4;g+=2.6){ctx.beginPath();ctx.moveTo(g,-3.2);ctx.lineTo(g,3.2);ctx.stroke();}
+  for(let g=-3;g<=3;g+=2.2){ctx.beginPath();ctx.moveTo(-5.4,g);ctx.lineTo(5.4,g);ctx.stroke();}
+  ctx.restore(); ctx.globalAlpha=1;
+
+  ctx.fillStyle=k.skin;                                       // head
+  ctx.beginPath(); ctx.arc(fx,headY,4.4,0,7); ctx.fill();
+  ctx.fillStyle=k.hair;                                       // hair, offset by facing
+  ctx.beginPath(); ctx.arc(fx-Math.cos(p.face)*1.1,headY-1.5,3.6,Math.PI,2*Math.PI); ctx.fill();
+}
+
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 function draw(){
   const wall=css('--wall'),wood=css('--wood'),woodDk=css('--wood-dk'),line=css('--line'),ink=css('--ink');
@@ -443,17 +529,7 @@ function draw(){
   ctx.strokeStyle=css('--rule'); ctx.lineWidth=1; ctx.strokeRect(ox+.5,oy+.5,cw-1,cl-1);
 
   // ── players ──
-  const cols=['#2C6E9B','#8A5A2B'];
-  for(let i=0;i<(solo()?1:2);i++){
-    const p=S.P[i];
-    ctx.globalAlpha=.12; ctx.fillStyle=cols[i];
-    ctx.beginPath(); ctx.arc(mx(p.x),my(p.y),REACH*PPM,0,7); ctx.fill(); ctx.globalAlpha=1;
-    ctx.fillStyle=cols[i]; ctx.beginPath(); ctx.arc(mx(p.x),my(p.y),9,0,7); ctx.fill();
-    if(p.sw>0){ctx.strokeStyle=cols[i];ctx.lineWidth=2.5;ctx.beginPath();
-      ctx.arc(mx(p.x),my(p.y),16,0,7);ctx.stroke();}
-    ctx.fillStyle='#fff'; ctx.font='700 10px "Barlow Condensed",sans-serif'; ctx.textAlign='center';
-    ctx.fillText(String(i+1),mx(p.x),my(p.y)+3.5);
-  }
+  for(let i=0;i<(solo()?1:2);i++) drawPlayer(i,S.P[i]);
 
   // ── ball, with its shadow on the floor ──
   const b=S.B;
