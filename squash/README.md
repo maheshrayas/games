@@ -7,6 +7,23 @@ landed relative to the tin and the out line.
 Modes: solo practice (rally alone, tracks your best streak), two players on one
 keyboard, and three computer difficulties.
 
+## Ball speed
+
+Real squash balls are graded by a coloured dot, and the grading is exactly how
+fast and how lively they are — so the difficulty dial uses the real
+designations rather than inventing "easy / normal / hard".
+
+| Ball | Level | Drive | Floor bounce | |
+|---|---|---|---|---|
+| Blue | Beginner | ~10 m/s | 0.54 | Bounces high and travels slowly; long rallies |
+| Red | Intermediate | ~12.5 m/s | 0.45 | Middling pace and bounce |
+| Double yellow | Expert | ~16.7 m/s | 0.34 | Fast and nearly dead — the competition ball |
+
+This is **separate from computer difficulty**, so it also applies in solo
+practice and two-player, where there is no CPU to grade. Pace is stored as the
+flight time to the front wall, so in `BALLS` a *larger* number is a *slower*
+ball.
+
 ## Rules implemented
 
 | Rule | |
@@ -44,6 +61,11 @@ across the court as you hit sends it cross-court.
 
 ## Notes on the physics
 
-Gravity is exaggerated (13.5 m/s² rather than 9.81) and the ball is far bouncier
-than a real squash ball, which is famously dead when cold. Both are deliberate:
-a faithfully dead ball makes for long, dull rallies at this scale.
+Gravity is exaggerated (13.5 m/s² rather than 9.81), and even the double yellow
+is livelier here than the real thing, which is famously dead until it warms up.
+Both are deliberate: a faithfully dead ball makes for short, frustrating rallies
+at this scale.
+
+The serve derives its wall-to-floor flight time analytically rather than
+assuming a fixed total, so it stays legal at any ball pace. Getting this wrong
+is what made every serve a fault in the first draft.

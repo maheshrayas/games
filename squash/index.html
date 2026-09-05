@@ -71,6 +71,16 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
 .modes{display:flex;flex-direction:column;gap:7px;margin-top:12px}
 .modes button{flex:none;text-align:left;padding:11px 13px}
 .modes small{display:block;font-weight:400;color:var(--ink-soft);font-size:11.5px;margin-top:2px}
+.ballsel{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--rule);
+  border-radius:10px;padding:6px 8px 6px 11px}
+.ballsel .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);
+  font-weight:600;flex-shrink:0}
+.ballsel button{flex:1;padding:6px 4px;font-size:11.5px;border-radius:7px;display:flex;
+  align-items:center;justify-content:center;gap:5px}
+.ballsel button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.25)}
+.dot.blue{background:#2C6E9B}.dot.red{background:#B23A2E}
+.dot.yellow{background:#E8C33A;box-shadow:inset 0 -4px 0 #C9A21F}
 .hint{font-size:11.5px;color:var(--ink-soft);text-align:center;line-height:1.5}
 </style>
 
@@ -92,11 +102,18 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
   </div>
 
   <canvas id="cv" width="440" height="700"></canvas>
+  <div class="ballsel" id="ballSel">
+    <span class="lbl">Ball</span>
+    <button data-ball="blue"   aria-pressed="false"><i class="dot blue"></i>Blue</button>
+    <button data-ball="red"    aria-pressed="true"><i class="dot red"></i>Red</button>
+    <button data-ball="yellow" aria-pressed="false"><i class="dot yellow"></i>2× Yellow</button>
+  </div>
   <div class="status" id="status">Choose a mode to start.</div>
   <div class="row">
     <button id="menuBtn">Change mode</button>
     <button id="serveBtn" class="primary">Serve</button>
   </div>
+  <p class="hint" id="ballNote"></p>
   <p class="hint" id="hint"></p>
 </div>
 
@@ -144,6 +161,13 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
   <p>Point-a-rally to <b>11</b>, and you must win by two. Matches are best of five games. Whoever wins the
      rally serves next, whether they served it or not.</p>
 
+  <h3>The ball decides the difficulty</h3>
+  <p>Squash balls are graded by a coloured dot, and the grading is exactly how fast and how lively they are.
+     Clubs hand a <b>blue</b> ball to beginners because it bounces high and moves slowly, giving you time to
+     get there. The <b>double yellow</b> is the competition ball: quick, and so dead it drops out of the air
+     rather than bouncing up to you. Pick one under the court — it changes every mode, including practice
+     and two-player.</p>
+
   <h3>Tactics, in one line</h3>
   <p>Hit it long and tight to the side wall, then get back to the <b>T</b> — the marked spot in the middle.
      Whoever holds the T does less running.</p>
@@ -158,6 +182,22 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
 <script>
 const C={W:6.4,L:9.75,TIN:.48,FW_OUT:4.57,BW_OUT:2.13,SERVE_LINE:1.78,SHORT:4.26,BOX:1.6};
 const G=13.5, FLOOR_E=.42, WALL_E=.72, REACH=1.15, MAX_REACH_H=2.3;
+
+// Real squash balls are graded by a colour dot, and the grading is exactly
+// this axis: how fast and how lively. Blue bounces highest and travels
+// slowest, which is why clubs hand it to beginners; the double yellow is the
+// competition ball and is close to dead. `drive`/`lob`/`serve` are flight
+// times to the front wall in seconds, so a LARGER number is a SLOWER ball.
+const BALLS={
+  blue:  {label:'Blue',  tier:'Beginner',     drive:.60, lob:1.02, serve:.50, floorE:.54,
+          note:'Bounces high and travels slowly. Long rallies, plenty of time to reach the ball.'},
+  red:   {label:'Red',   tier:'Intermediate', drive:.48, lob:.88,  serve:.44, floorE:.45,
+          note:'Middling pace and bounce — the usual step up once rallies stop being a scramble.'},
+  yellow:{label:'Double yellow', tier:'Expert', drive:.36, lob:.74, serve:.38, floorE:.34,
+          note:'Fast and nearly dead. The competition ball: it drops out of the air and punishes a short shot.'}
+};
+let ballKey='red';
+const BALL=()=>BALLS[ballKey];
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const $=id=>document.getElementById(id);
 
@@ -208,14 +248,17 @@ function serve(){
   // Aim across the court so it lands in the opposite back quarter, and safely
   // above the service line — a legal serve should be the easy default.
   const tz=C.SERVE_LINE+.75+Math.random()*.5;
-  const b=S.B, dy=b.y, t=.42;
+  const b=S.B, dy=b.y, t=BALL().serve;
   b.vy=-dy/t; b.vz=(tz-b.z)/t+.5*G*t;
-  // Sideways speed is set over the WHOLE flight (~1.2s), not just the leg to
-  // the wall. Solving it for the wall alone leaves so much lateral speed that
-  // the ball caroms off the side wall and lands back in the server's own
-  // quarter — a fault the server never earned.
+  // Sideways speed is solved over the WHOLE flight, not just the leg to the
+  // wall. Solving it for the wall alone leaves so much lateral speed that the
+  // ball caroms off the side wall and lands back in the server's own quarter
+  // — a fault the server never earned. The wall-to-floor half is derived
+  // rather than assumed, so this stays correct at any ball pace.
+  const vzw=b.vz-G*t;                                  // vertical speed at the wall
+  const fall=(vzw+Math.sqrt(vzw*vzw+2*G*tz))/G;        // wall -> floor
   const landX=right?C.W*.28:C.W*.72;
-  b.vx=(landX-b.x)/1.2;
+  b.vx=(landX-b.x)/(t+fall);
   b.live=true; S.phase='rally'; S.floorB=0; S.frontOK=false;
   S.striker=s; S.lastHitBy=s; S.serveShot=true; S.msg='';
 }
@@ -231,7 +274,7 @@ function swing(i,lob){
 
   p.cool=.22; p.sw=.13;
   const aim=(p.vx/5)*.55 + (Math.random()-.5)*.22;   // your movement steers it
-  const t=lob?.85:.44;
+  const t=lob?BALL().lob:BALL().drive;
   const tz=lob?3.3:C.TIN+.35+Math.random()*.85;
   const tx=Math.min(C.W-.35,Math.max(.35,b.x+aim*3.4));
   b.vy=-b.y/t; b.vx=(tx-b.x)/t; b.vz=(tz-b.z)/t+.5*G*t;
@@ -245,7 +288,7 @@ function cpuSwing(i){
   p.cool=.22; p.sw=.13;
   const bad=Math.random()<c.err;                   // sometimes finds the tin or the out line
   const lob=Math.random()<.22;
-  const t=lob?.85:.44;
+  const t=lob?BALL().lob:BALL().drive;
   const tz=bad?(Math.random()<.55?C.TIN-.12:C.FW_OUT+.18):(lob?3.3:C.TIN+.4+Math.random()*.9);
   const tx=Math.min(C.W-.3,Math.max(.3,Math.random()<.6?(b.x<C.W/2?.7:C.W-.7):Math.random()*C.W));
   b.vy=-b.y/t; b.vx=(tx-b.x)/t; b.vz=(tz-b.z)/t+.5*G*t;
@@ -309,7 +352,7 @@ function stepBall(dt){
 
   // floor
   if(b.z<=0&&b.vz<0){
-    b.z=0; b.vz=-b.vz*FLOOR_E; b.vx*=.94; b.vy*=.94; S.floorB++;
+    b.z=0; b.vz=-b.vz*BALL().floorE; b.vx*=.94; b.vy*=.94; S.floorB++;
     if(!S.frontOK)
       return point(solo()?0:1-S.striker,'Down — the ball never reached the front wall.');
     if(S.serveShot&&S.floorB===1){
@@ -504,6 +547,15 @@ function movePtr(e){
   S.P[0].x=Math.max(.25,Math.min(C.W-.25,x)); S.P[0].y=Math.max(.25,Math.min(C.L-.25,y));
 }
 
+function setBall(k){
+  ballKey=k;
+  for(const b of document.querySelectorAll('[data-ball]'))
+    b.setAttribute('aria-pressed', String(b.dataset.ball===k));
+  const B=BALLS[k];
+  $('ballNote').innerHTML=`<b>${B.label} — ${B.tier}.</b> ${B.note}`;
+}
+document.querySelectorAll('[data-ball]').forEach(b=>b.onclick=()=>setBall(b.dataset.ball));
+
 $('serveBtn').onclick=()=>{if(!S)return;
   if(S.phase==='over')start(S.mode); else if(S.phase==='serve'&&(solo()||S.server===0||S.mode==='human'))serve();};
 $('menuBtn').onclick=()=>$('menuDlg').showModal();
@@ -513,5 +565,5 @@ for(const d of [$('menuDlg'),$('rulesDlg')])
 document.querySelectorAll('[data-mode]').forEach(b=>
   b.onclick=()=>{$('menuDlg').close(); start(b.dataset.mode);});
 
-layout(); start('cpu-easy'); $('menuDlg').showModal(); raf=requestAnimationFrame(frame);
+layout(); setBall(ballKey); start('cpu-easy'); $('menuDlg').showModal(); raf=requestAnimationFrame(frame);
 </script>
