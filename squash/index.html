@@ -1,0 +1,517 @@
+<title>Glass Court Squash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --wood:#DFBE8E; --wood-dk:#C9A473; --line:#B23A2E; --wall:#F2EFE9;
+  --ball:#16181C; --ink:#22201C; --ink-soft:#6E665A; --rule:#DED6C8;
+  --surface:#FBF8F3; --ground:#EFEAE1; --accent:#B23A2E; --good:#2F7D4F;
+  --panel:#FFFFFF; --shadow:rgba(40,30,15,.13);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --wall:#20242B; --ink:#ECE6DC; --ink-soft:#9A9384; --rule:#2E333C;
+  --surface:#171A20; --ground:#0E1014; --panel:#1C2028; --accent:#E4634D;
+  --shadow:rgba(0,0,0,.5);
+}}
+:root[data-theme="dark"]{
+  --wall:#20242B; --ink:#ECE6DC; --ink-soft:#9A9384; --rule:#2E333C;
+  --surface:#171A20; --ground:#0E1014; --panel:#1C2028; --accent:#E4634D;
+  --shadow:rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  margin:0;padding:16px;display:flex;justify-content:center;min-height:100vh;-webkit-text-size-adjust:100%}
+.stage{width:100%;max-width:460px;display:flex;flex-direction:column;gap:12px}
+h1{font-family:"Barlow Condensed",Impact,sans-serif;font-weight:700;font-size:26px;letter-spacing:.02em;
+  margin:0;text-transform:uppercase;line-height:1}
+.sub{color:var(--ink-soft);font-size:12.5px;margin:2px 0 0}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.board{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:10px 14px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 1px 2px var(--shadow)}
+.side{display:flex;flex-direction:column;gap:1px;min-width:0}
+.side.r{align-items:flex-end;text-align:right}
+.nm{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+.nm.serving{color:var(--accent)}
+.nm.serving::after{content:" ●";font-size:8px;vertical-align:middle}
+.pts{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:38px;line-height:.85;
+  font-variant-numeric:tabular-nums}
+.games{font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.mid{text-align:center;font-size:10.5px;color:var(--ink-soft);letter-spacing:.1em;text-transform:uppercase;
+  font-weight:600;flex-shrink:0}
+canvas{display:block;width:100%;border-radius:12px;background:var(--wall);
+  box-shadow:0 2px 10px var(--shadow);touch-action:none}
+.status{min-height:38px;background:var(--panel);border:1px solid var(--rule);border-radius:10px;
+  padding:9px 12px;font-size:13px;display:flex;align-items:center;gap:8px;line-height:1.35}
+.status b{color:var(--accent)}
+.status.ok b{color:var(--good)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button{font-family:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;
+  border:1px solid var(--rule);background:var(--panel);color:var(--ink);cursor:pointer;flex:1;
+  min-width:0;transition:background .12s,border-color .12s}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{filter:brightness(1.08)}
+dialog{border:1px solid var(--rule);border-radius:14px;background:var(--panel);color:var(--ink);
+  padding:0;max-width:400px;width:calc(100% - 32px);box-shadow:0 10px 40px var(--shadow)}
+dialog::backdrop{background:rgba(10,8,4,.55)}
+.dlg{padding:20px}
+.dlg h2{font-family:"Barlow Condensed",sans-serif;text-transform:uppercase;font-size:21px;margin:0 0 10px;
+  letter-spacing:.02em;font-weight:700}
+.dlg h3{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);
+  margin:16px 0 5px;font-weight:600}
+.dlg p,.dlg li{font-size:13px;line-height:1.5;margin:5px 0;color:var(--ink)}
+.dlg ul{padding-left:17px;margin:5px 0}
+.note{background:var(--ground);border-left:2px solid var(--accent);padding:9px 11px;border-radius:0 7px 7px 0;
+  font-size:12.5px;line-height:1.5;margin:12px 0 0;color:var(--ink-soft)}
+kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--ground);border:1px solid var(--rule);
+  border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-weight:600;white-space:nowrap}
+.modes{display:flex;flex-direction:column;gap:7px;margin-top:12px}
+.modes button{flex:none;text-align:left;padding:11px 13px}
+.modes small{display:block;font-weight:400;color:var(--ink-soft);font-size:11.5px;margin-top:2px}
+.hint{font-size:11.5px;color:var(--ink-soft);text-align:center;line-height:1.5}
+</style>
+
+<div class="stage">
+  <div class="head">
+    <div>
+      <h1>Glass Court</h1>
+      <p class="sub" id="modeLabel">Squash — full rules, one honest omission</p>
+    </div>
+    <button id="rulesBtn" style="flex:0 0 auto;padding:7px 12px;font-size:12px">Rules</button>
+  </div>
+
+  <div class="board">
+    <div class="side"><span class="nm" id="n0">You</span><span class="pts" id="p0">0</span>
+      <span class="games" id="g0">games 0</span></div>
+    <div class="mid" id="gameNo">Game 1</div>
+    <div class="side r"><span class="nm" id="n1">Computer</span><span class="pts" id="p1">0</span>
+      <span class="games" id="g1">games 0</span></div>
+  </div>
+
+  <canvas id="cv" width="440" height="700"></canvas>
+  <div class="status" id="status">Choose a mode to start.</div>
+  <div class="row">
+    <button id="menuBtn">Change mode</button>
+    <button id="serveBtn" class="primary">Serve</button>
+  </div>
+  <p class="hint" id="hint"></p>
+</div>
+
+<dialog id="menuDlg"><div class="dlg">
+  <h2>Glass Court Squash</h2>
+  <p>A real squash court is 6.4m wide and 9.75m deep, seen here from above. The strip at the top is the
+     front wall, viewed head-on — every shot leaves a mark on it, so you can see why a rally ended.</p>
+  <div class="modes">
+    <button data-mode="practice"><b>Practice (solo)</b><small>Rally alone against the front wall, the way
+      players actually warm up. Counts your best streak.</small></button>
+    <button data-mode="cpu-easy"><b>vs Computer — Club</b><small>Slow to the ball, loose length.</small></button>
+    <button data-mode="cpu-med"><b>vs Computer — County</b><small>Covers the court, punishes a short
+      ball.</small></button>
+    <button data-mode="cpu-hard"><b>vs Computer — Pro</b><small>Takes the ball early and finds the
+      nick.</small></button>
+    <button data-mode="human"><b>2 Players</b><small>Same keyboard. WASD + Space against Arrows +
+      Enter.</small></button>
+  </div>
+</div></dialog>
+
+<dialog id="rulesDlg"><div class="dlg">
+  <h2>How squash works</h2>
+  <p>Two players share one enclosed court and hit the same ball alternately. Every shot must reach the
+     <b>front wall</b>. You may let the ball bounce on the floor <b>once</b> before you hit it — or volley it
+     before it bounces at all.</p>
+
+  <h3>The three ways to lose a rally</h3>
+  <ul>
+    <li><b>The tin.</b> A 48cm board across the bottom of the front wall. Hit it and the rally is over —
+      it's the equivalent of the net in tennis.</li>
+    <li><b>Out.</b> Above the red line. It's 4.57m high on the front wall, sloping down the side walls to
+      2.13m at the back.</li>
+    <li><b>Two bounces.</b> Fail to reach the ball before its second bounce.</li>
+  </ul>
+
+  <h3>Serving</h3>
+  <ul>
+    <li>One foot in the service box.</li>
+    <li>The serve must hit the front wall <b>above the service line</b> (1.78m) and below the out line.</li>
+    <li>It must then land in the <b>opposite back quarter</b>.</li>
+    <li>Win the rally and you serve again, from the other box.</li>
+  </ul>
+
+  <h3>Scoring</h3>
+  <p>Point-a-rally to <b>11</b>, and you must win by two. Matches are best of five games. Whoever wins the
+     rally serves next, whether they served it or not.</p>
+
+  <h3>Tactics, in one line</h3>
+  <p>Hit it long and tight to the side wall, then get back to the <b>T</b> — the marked spot in the middle.
+     Whoever holds the T does less running.</p>
+
+  <div class="note"><b>One rule this game leaves out: let and stroke.</b> In real squash both players occupy
+    the same space, so most disputes are about interference — did your opponent block your swing, did they
+    clear out of the way. Judging that needs body position, swing arc and a referee's opinion; it's the most
+    argued-about part of the sport, and professional referees regularly disagree. Rather than fake it, players
+    here simply pass through each other. Everything else above is enforced exactly as written.</div>
+</div></dialog>
+
+<script>
+const C={W:6.4,L:9.75,TIN:.48,FW_OUT:4.57,BW_OUT:2.13,SERVE_LINE:1.78,SHORT:4.26,BOX:1.6};
+const G=13.5, FLOOR_E=.42, WALL_E=.72, REACH=1.15, MAX_REACH_H=2.3;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+
+// Front-wall elevation panel sits above the court; both share the court's width.
+let PAD=14, WALL_H=112, PPM=1, ox=0, oy=0;
+function layout(){
+  const w=cv.width;
+  PPM=(w-PAD*2)/C.W; ox=PAD; oy=PAD+WALL_H+10;
+  cv.height=oy+C.L*PPM+PAD;
+}
+const mx=x=>ox+x*PPM, my=y=>oy+y*PPM;
+
+let S=null, marks=[], keys={}, raf=0, last=0;
+
+function newState(mode){
+  const cpu={'cpu-easy':{sp:3.6,react:.34,err:.30,reach:1.05},
+             'cpu-med':{sp:4.7,react:.20,err:.17,reach:1.15},
+             'cpu-hard':{sp:5.9,react:.10,err:.07,reach:1.28}}[mode];
+  return {mode,cpu,
+    phase:'serve', // serve | rally | dead | over
+    pts:[0,0], games:[0,0], gameNo:1, server:0, box:0, // box 0=right,1=left
+    striker:0, floorB:0, frontOK:false, lastHitBy:-1, serveShot:false,
+    streak:0, best:0, msg:'', msgOk:false, deadT:0,
+    P:[{x:C.W*.5,y:6.6,vx:0,vy:0,sw:0,cool:0},{x:C.W*.5,y:3.2,vx:0,vy:0,sw:0,cool:0}],
+    B:{x:0,y:0,z:0,vx:0,vy:0,vz:0,live:false}};
+}
+
+function solo(){return S.mode==='practice';}
+function names(){return solo()?['You','—']:S.mode==='human'?['Player 1','Player 2']:['You','Computer'];}
+
+// ── serve setup ────────────────────────────────────────────────────────────
+function setupServe(){
+  const s=S.server, right=S.box===0;
+  // Service box: behind the short line, against the side wall.
+  const bx=right?C.W-C.BOX/2:C.BOX/2;
+  S.P[s].x=bx; S.P[s].y=C.SHORT+C.BOX/2;
+  if(!solo()){const r=1-s; S.P[r].x=right?C.BOX*.8:C.W-C.BOX*.8; S.P[r].y=C.SHORT+2.4;}
+  Object.assign(S.B,{x:bx,y:C.SHORT+C.BOX/2,z:.9,vx:0,vy:0,vz:0,live:false});
+  S.striker=s; S.floorB=0; S.frontOK=false; S.lastHitBy=-1; S.serveShot=true;
+  S.phase='serve';
+  S.msg=solo()?'Press Space to feed yourself a ball.'
+    :`${names()[s]} to serve from the ${right?'right':'left'} box.`;
+  S.msgOk=false;
+}
+
+function serve(){
+  const s=S.server, right=S.box===0;
+  // Aim across the court so it lands in the opposite back quarter, and safely
+  // above the service line — a legal serve should be the easy default.
+  const tz=C.SERVE_LINE+.75+Math.random()*.5;
+  const b=S.B, dy=b.y, t=.42;
+  b.vy=-dy/t; b.vz=(tz-b.z)/t+.5*G*t;
+  // Sideways speed is set over the WHOLE flight (~1.2s), not just the leg to
+  // the wall. Solving it for the wall alone leaves so much lateral speed that
+  // the ball caroms off the side wall and lands back in the server's own
+  // quarter — a fault the server never earned.
+  const landX=right?C.W*.28:C.W*.72;
+  b.vx=(landX-b.x)/1.2;
+  b.live=true; S.phase='rally'; S.floorB=0; S.frontOK=false;
+  S.striker=s; S.lastHitBy=s; S.serveShot=true; S.msg='';
+}
+
+// ── striking ───────────────────────────────────────────────────────────────
+function swing(i,lob){
+  const p=S.P[i], b=S.B;
+  if(!b.live||p.cool>0) return;
+  if(S.lastHitBy===i && !solo()) return;         // can't hit twice in a row
+  const d=Math.hypot(b.x-p.x,b.y-p.y);
+  if(d>REACH||b.z>MAX_REACH_H) return;
+  if(S.floorB>1) return;
+
+  p.cool=.22; p.sw=.13;
+  const aim=(p.vx/5)*.55 + (Math.random()-.5)*.22;   // your movement steers it
+  const t=lob?.85:.44;
+  const tz=lob?3.3:C.TIN+.35+Math.random()*.85;
+  const tx=Math.min(C.W-.35,Math.max(.35,b.x+aim*3.4));
+  b.vy=-b.y/t; b.vx=(tx-b.x)/t; b.vz=(tz-b.z)/t+.5*G*t;
+  S.striker=i; S.lastHitBy=i; S.floorB=0; S.frontOK=false; S.serveShot=false;
+}
+
+function cpuSwing(i){
+  const p=S.P[i],b=S.B,c=S.cpu;
+  if(p.cool>0||S.lastHitBy===i) return;
+  if(Math.hypot(b.x-p.x,b.y-p.y)>c.reach||b.z>MAX_REACH_H||S.floorB>1) return;
+  p.cool=.22; p.sw=.13;
+  const bad=Math.random()<c.err;                   // sometimes finds the tin or the out line
+  const lob=Math.random()<.22;
+  const t=lob?.85:.44;
+  const tz=bad?(Math.random()<.55?C.TIN-.12:C.FW_OUT+.18):(lob?3.3:C.TIN+.4+Math.random()*.9);
+  const tx=Math.min(C.W-.3,Math.max(.3,Math.random()<.6?(b.x<C.W/2?.7:C.W-.7):Math.random()*C.W));
+  b.vy=-b.y/t; b.vx=(tx-b.x)/t; b.vz=(tz-b.z)/t+.5*G*t;
+  S.striker=i; S.lastHitBy=i; S.floorB=0; S.frontOK=false; S.serveShot=false;
+}
+
+// ── point resolution ───────────────────────────────────────────────────────
+function outHeightAt(y){return C.FW_OUT+(C.BW_OUT-C.FW_OUT)*(y/C.L);}
+
+function point(winner,why,ok){
+  S.B.live=false; S.phase='dead'; S.deadT=1.5;
+  if(solo()){
+    S.msg=why+` Streak: ${S.streak} (best ${S.best}).`; S.msgOk=false; S.streak=0; return;
+  }
+  S.pts[winner]++;
+  const w=S.pts[winner], l=S.pts[1-winner];
+  S.msg=`${why} Point to ${names()[winner]}.`; S.msgOk=!!ok;
+  if(w>=11&&w-l>=2){
+    S.games[winner]++;
+    if(S.games[winner]>=3){
+      S.phase='over';
+      S.msg=`${names()[winner]} wins the match ${S.games[0]}–${S.games[1]}.`;
+      S.deadT=1e9; return;
+    }
+    S.msg=`${why} ${names()[winner]} takes game ${S.gameNo}, ${w}–${l}.`;
+    S.gameNo++; S.pts=[0,0]; S.deadT=2.2;
+  }
+  // Winner of the rally serves next; alternate boxes.
+  if(S.server===winner) S.box=1-S.box; else {S.server=winner; S.box=0;}
+}
+
+// ── physics ────────────────────────────────────────────────────────────────
+function stepBall(dt){
+  const b=S.B; if(!b.live) return;
+  b.vz-=G*dt;
+  b.x+=b.vx*dt; b.y+=b.vy*dt; b.z+=b.vz*dt;
+
+  // front wall
+  if(b.y<=0){
+    b.y=0; b.vy=-b.vy*WALL_E;
+    marks.push({x:b.x,z:b.z,t:1});
+    if(b.z<C.TIN)  return point(solo()?0:1-S.striker,'Down — the ball hit the tin.');
+    if(b.z>C.FW_OUT) return point(solo()?0:1-S.striker,'Out — above the front-wall line.');
+    if(S.serveShot&&b.z<C.SERVE_LINE)
+      return point(solo()?0:1-S.striker,'Fault — the serve was below the service line.');
+    S.frontOK=true;
+    if(solo()){S.streak++; if(S.streak>S.best)S.best=S.streak;}
+  }
+  // back wall
+  if(b.y>=C.L){
+    if(b.z>C.BW_OUT) return point(solo()?0:1-S.striker,'Out — over the back-wall line.');
+    b.y=C.L; b.vy=-b.vy*WALL_E;
+  }
+  // side walls
+  if(b.x<=0||b.x>=C.W){
+    if(b.z>outHeightAt(b.y)) return point(solo()?0:1-S.striker,'Out — above the side-wall line.');
+    b.x=b.x<=0?0:C.W; b.vx=-b.vx*WALL_E;
+  }
+  // ceiling
+  if(b.z>=C.FW_OUT){b.z=C.FW_OUT; b.vz=-Math.abs(b.vz)*.5;}
+
+  // floor
+  if(b.z<=0&&b.vz<0){
+    b.z=0; b.vz=-b.vz*FLOOR_E; b.vx*=.94; b.vy*=.94; S.floorB++;
+    if(!S.frontOK)
+      return point(solo()?0:1-S.striker,'Down — the ball never reached the front wall.');
+    if(S.serveShot&&S.floorB===1){
+      const right=S.box===0;
+      const okQuarter = b.y>C.SHORT && (right? b.x<C.W/2 : b.x>=C.W/2);
+      if(!okQuarter) return point(solo()?0:1-S.striker,'Fault — the serve missed the opposite back quarter.');
+      S.serveShot=false;
+    }
+    if(S.floorB>=2){
+      if(solo()) return point(0,'Two bounces.');
+      return point(S.striker,'Two bounces — not retrieved.',true);
+    }
+  }
+  if(Math.abs(b.vz)<.35&&b.z<.05&&Math.hypot(b.vx,b.vy)<.6){
+    if(solo()) return point(0,'The ball died.');
+    return point(S.striker,'The ball died on the floor.',true);
+  }
+}
+
+function stepPlayers(dt){
+  const sp=5.4;
+  for(let i=0;i<S.P.length;i++){
+    const p=S.P[i]; p.cool=Math.max(0,p.cool-dt); p.sw=Math.max(0,p.sw-dt);
+    let dx=0,dy=0;
+    const human=(i===0)||(S.mode==='human'&&i===1);
+    if(human&&S.phase!=='over'){
+      const k=i===0?{l:'a',r:'d',u:'w',d:'s'}:{l:'arrowleft',r:'arrowright',u:'arrowup',d:'arrowdown'};
+      if(keys[k.l])dx-=1; if(keys[k.r])dx+=1; if(keys[k.u])dy-=1; if(keys[k.d])dy+=1;
+    }else if(!solo()&&i===1&&S.B.live&&S.phase==='rally'){
+      // Aim at where the ball will be, with a reaction delay baked into the speed.
+      const b=S.B, tx=b.x+b.vx*S.cpu.react, ty=Math.max(1,Math.min(C.L-.4,b.y+b.vy*S.cpu.react));
+      dx=Math.sign(tx-p.x)*(Math.abs(tx-p.x)>.12?1:0);
+      dy=Math.sign(ty-p.y)*(Math.abs(ty-p.y)>.12?1:0);
+    }else if(!solo()&&i===1){ // drift back to the T between rallies
+      dx=Math.sign(C.W/2-p.x)*(Math.abs(C.W/2-p.x)>.15?1:0);
+      dy=Math.sign(C.SHORT-p.y)*(Math.abs(C.SHORT-p.y)>.15?1:0);
+    }
+    const m=Math.hypot(dx,dy)||1, s=(i===1&&!solo()&&S.mode!=='human')?S.cpu.sp:sp;
+    p.vx=dx/m*s; p.vy=dy/m*s;
+    p.x=Math.max(.25,Math.min(C.W-.25,p.x+p.vx*dt));
+    p.y=Math.max(.25,Math.min(C.L-.25,p.y+p.vy*dt));
+  }
+  if(!solo()&&S.mode!=='human'&&S.phase==='rally') cpuSwing(1);
+}
+
+// ── render ─────────────────────────────────────────────────────────────────
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function draw(){
+  const wall=css('--wall'),wood=css('--wood'),woodDk=css('--wood-dk'),line=css('--line'),ink=css('--ink');
+  ctx.fillStyle=wall; ctx.fillRect(0,0,cv.width,cv.height);
+
+  // ── front wall elevation (head-on) ──
+  const wx=ox, wy=PAD, ww=C.W*PPM, wh=WALL_H, hz=z=>wy+wh-(z/C.FW_OUT)*wh;
+  ctx.fillStyle=css('--panel'); ctx.fillRect(wx,wy,ww,wh);
+  ctx.strokeStyle=css('--rule'); ctx.lineWidth=1; ctx.strokeRect(wx+.5,wy+.5,ww-1,wh-1);
+  ctx.fillStyle=line; ctx.globalAlpha=.85;                       // the tin
+  ctx.fillRect(wx,hz(C.TIN),ww,wy+wh-hz(C.TIN)); ctx.globalAlpha=1;
+  ctx.strokeStyle=line; ctx.lineWidth=1.5;                        // service line
+  ctx.beginPath(); ctx.moveTo(wx,hz(C.SERVE_LINE)); ctx.lineTo(wx+ww,hz(C.SERVE_LINE)); ctx.stroke();
+  ctx.lineWidth=2.5; ctx.beginPath();                             // out line
+  ctx.moveTo(wx,hz(C.FW_OUT)+1); ctx.lineTo(wx+ww,hz(C.FW_OUT)+1); ctx.stroke();
+  ctx.font='600 8.5px "IBM Plex Sans",sans-serif'; ctx.fillStyle=css('--ink-soft');
+  ctx.textAlign='left';  ctx.fillText('OUT LINE 4.57m',wx+5,hz(C.FW_OUT)+12);
+  ctx.fillText('SERVICE 1.78m',wx+5,hz(C.SERVE_LINE)-4);
+  ctx.textAlign='right'; ctx.fillStyle='#fff'; ctx.fillText('TIN',wx+ww-5,wy+wh-5);
+  for(const m of marks){                                          // where shots struck
+    ctx.globalAlpha=m.t*.9; ctx.fillStyle=m.z<C.TIN||m.z>C.FW_OUT?line:ink;
+    ctx.beginPath(); ctx.arc(wx+(m.x/C.W)*ww,hz(Math.max(0,Math.min(C.FW_OUT,m.z))),3.2,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  ctx.textAlign='center'; ctx.font='600 8.5px "IBM Plex Sans",sans-serif'; ctx.fillStyle=css('--ink-soft');
+  ctx.fillText('FRONT WALL — SEEN HEAD-ON',wx+ww/2,wy-3);
+
+  // ── court floor, from above ──
+  const cw=C.W*PPM, cl=C.L*PPM;
+  const g=ctx.createLinearGradient(0,oy,0,oy+cl); g.addColorStop(0,wood); g.addColorStop(1,woodDk);
+  ctx.fillStyle=g; ctx.fillRect(ox,oy,cw,cl);
+  for(let i=0;i<=C.W;i+=.4){ ctx.strokeStyle='rgba(120,85,40,.10)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(mx(i),oy); ctx.lineTo(mx(i),oy+cl); ctx.stroke(); }
+  ctx.strokeStyle=line; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(ox,my(C.SHORT)); ctx.lineTo(ox+cw,my(C.SHORT)); ctx.stroke();  // short line
+  ctx.beginPath(); ctx.moveTo(mx(C.W/2),my(C.SHORT)); ctx.lineTo(mx(C.W/2),oy+cl); ctx.stroke(); // half
+  ctx.lineWidth=1.5;                                                                    // service boxes
+  for(const bx of [0,C.W-C.BOX]) ctx.strokeRect(mx(bx),my(C.SHORT),C.BOX*PPM,C.BOX*PPM);
+  ctx.strokeStyle='rgba(178,58,46,.5)'; ctx.lineWidth=1.5;                              // the T
+  ctx.beginPath(); ctx.moveTo(mx(C.W/2)-13,my(C.SHORT)); ctx.lineTo(mx(C.W/2)+13,my(C.SHORT));
+  ctx.moveTo(mx(C.W/2),my(C.SHORT)); ctx.lineTo(mx(C.W/2),my(C.SHORT)+16); ctx.stroke();
+  ctx.strokeStyle=css('--rule'); ctx.lineWidth=1; ctx.strokeRect(ox+.5,oy+.5,cw-1,cl-1);
+
+  // ── players ──
+  const cols=['#2C6E9B','#8A5A2B'];
+  for(let i=0;i<(solo()?1:2);i++){
+    const p=S.P[i];
+    ctx.globalAlpha=.12; ctx.fillStyle=cols[i];
+    ctx.beginPath(); ctx.arc(mx(p.x),my(p.y),REACH*PPM,0,7); ctx.fill(); ctx.globalAlpha=1;
+    ctx.fillStyle=cols[i]; ctx.beginPath(); ctx.arc(mx(p.x),my(p.y),9,0,7); ctx.fill();
+    if(p.sw>0){ctx.strokeStyle=cols[i];ctx.lineWidth=2.5;ctx.beginPath();
+      ctx.arc(mx(p.x),my(p.y),16,0,7);ctx.stroke();}
+    ctx.fillStyle='#fff'; ctx.font='700 10px "Barlow Condensed",sans-serif'; ctx.textAlign='center';
+    ctx.fillText(String(i+1),mx(p.x),my(p.y)+3.5);
+  }
+
+  // ── ball, with its shadow on the floor ──
+  const b=S.B;
+  if(b.live||S.phase==='serve'){
+    ctx.globalAlpha=.22; ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.ellipse(mx(b.x),my(b.y),5,3.2,0,0,7); ctx.fill(); ctx.globalAlpha=1;
+    const lift=Math.min(b.z,C.FW_OUT)*PPM*.30;
+    ctx.fillStyle=css('--ball');
+    ctx.beginPath(); ctx.arc(mx(b.x),my(b.y)-lift,4.6+b.z*.32,0,7); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(mx(b.x),my(b.y)); ctx.lineTo(mx(b.x),my(b.y)-lift); ctx.stroke();
+  }
+}
+
+// ── loop ───────────────────────────────────────────────────────────────────
+function frame(t){
+  const dt=Math.min(.033,(t-last)/1000||0); last=t;
+  if(S){
+    if(S.phase==='rally'||S.phase==='serve'){stepPlayers(dt); stepBall(dt);}
+    if(S.phase==='dead'){S.deadT-=dt; if(S.deadT<=0) setupServe();}
+    for(let i=marks.length-1;i>=0;i--){marks[i].t-=dt*.22; if(marks[i].t<=0)marks.splice(i,1);}
+    if(marks.length>26) marks.splice(0,marks.length-26);
+    draw(); sync();
+  }
+  raf=requestAnimationFrame(frame);
+}
+
+function sync(){
+  const n=names();
+  $('n0').textContent=n[0]; $('n1').textContent=n[1];
+  $('n0').className='nm'+(!solo()&&S.server===0?' serving':'');
+  $('n1').className='nm r'+(!solo()&&S.server===1?' serving':'');
+  if(solo()){$('p0').textContent=S.streak; $('p1').textContent=S.best;
+    $('g0').textContent='streak'; $('g1').textContent='best'; $('gameNo').textContent='Practice';}
+  else{$('p0').textContent=S.pts[0]; $('p1').textContent=S.pts[1];
+    $('g0').textContent='games '+S.games[0]; $('g1').textContent='games '+S.games[1];
+    $('gameNo').textContent='Game '+S.gameNo;}
+  const st=$('status'); st.textContent=S.msg||(S.phase==='rally'?'Rally on.':'');
+  st.className='status'+(S.msgOk?' ok':'');
+  $('serveBtn').textContent=S.phase==='over'?'New match':'Serve';
+  $('serveBtn').disabled=S.phase==='rally';
+}
+
+function start(mode){
+  S=newState(mode); marks=[];
+  $('modeLabel').textContent={'practice':'Solo practice — rally against the front wall',
+    'cpu-easy':'vs Computer — Club','cpu-med':'vs Computer — County',
+    'cpu-hard':'vs Computer — Pro','human':'Two players, one keyboard'}[mode];
+  $('hint').innerHTML = mode==='human'
+    ? '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> + <kbd>Space</kbd> &nbsp;·&nbsp; '
+      +'<kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> + <kbd>Enter</kbd> &nbsp;·&nbsp; hold to lob'
+    : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to move &nbsp;·&nbsp; '
+      +'<kbd>Space</kbd> to hit, hold it to lob';
+  setupServe(); sync();
+}
+
+// ── input ──────────────────────────────────────────────────────────────────
+const held={};
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
+  if(keys[k])return; keys[k]=true;
+  if(!S)return;
+  if(k===' '||k==='enter'){held[k]=performance.now();}
+});
+addEventListener('keyup',e=>{
+  const k=e.key.toLowerCase(); keys[k]=false;
+  if(!S)return;
+  if(k===' '||k==='enter'){
+    const lob=performance.now()-(held[k]||0)>230; delete held[k];
+    const i=k===' '?0:1;
+    if(S.mode==='human'||i===0){
+      if(S.phase==='serve'&&S.server===i) serve();
+      else if(S.phase==='rally') swing(i,lob);
+      else if(S.phase==='over') start(S.mode);
+    }
+  }
+});
+// Touch: drag to move player 1, tap to hit.
+let touching=false;
+cv.addEventListener('pointerdown',e=>{
+  touching=true; cv.setPointerCapture(e.pointerId); movePtr(e);
+  if(S&&S.phase==='serve'&&S.server===0) serve(); else if(S&&S.phase==='rally') swing(0,false);
+  else if(S&&S.phase==='over') start(S.mode);
+});
+cv.addEventListener('pointermove',e=>{if(touching)movePtr(e);});
+cv.addEventListener('pointerup',()=>touching=false);
+function movePtr(e){
+  if(!S)return; const r=cv.getBoundingClientRect(), sc=cv.width/r.width;
+  const x=((e.clientX-r.left)*sc-ox)/PPM, y=((e.clientY-r.top)*sc-oy)/PPM;
+  S.P[0].x=Math.max(.25,Math.min(C.W-.25,x)); S.P[0].y=Math.max(.25,Math.min(C.L-.25,y));
+}
+
+$('serveBtn').onclick=()=>{if(!S)return;
+  if(S.phase==='over')start(S.mode); else if(S.phase==='serve'&&(solo()||S.server===0||S.mode==='human'))serve();};
+$('menuBtn').onclick=()=>$('menuDlg').showModal();
+$('rulesBtn').onclick=()=>$('rulesDlg').showModal();
+for(const d of [$('menuDlg'),$('rulesDlg')])
+  d.addEventListener('click',e=>{if(e.target===d)d.close();});
+document.querySelectorAll('[data-mode]').forEach(b=>
+  b.onclick=()=>{$('menuDlg').close(); start(b.dataset.mode);});
+
+layout(); start('cpu-easy'); $('menuDlg').showModal(); raf=requestAnimationFrame(frame);
+</script>
