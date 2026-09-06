@@ -93,6 +93,17 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
 .dot.blue{background:#2C6E9B}.dot.red{background:#B23A2E}
 .dot.yellow{background:#E8C33A;box-shadow:inset 0 -4px 0 #C9A21F}
 .hint{font-size:11.5px;color:var(--ink-soft);text-align:center;line-height:1.5}
+.rung{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--rule);
+  list-style:none;font-size:13px}
+.rung:last-child{border-bottom:0}
+.rung .mark{width:16px;flex:0 0 auto;text-align:center;font-weight:700;color:var(--ink-soft)}
+.rung small{display:block;color:var(--ink-soft);font-size:11.5px;line-height:1.4;margin-top:1px}
+.rung.beaten .mark{color:var(--good)}
+.rung.beaten b{color:var(--ink-soft);font-weight:600}
+.rung.next .mark{color:var(--accent)}
+.rung.next b{color:var(--accent)}
+.rung.locked{opacity:.5}
+#tourList{padding:0;margin:12px 0}
 
 /* A landscape phone has height to spare nowhere and width to spare everywhere.
    Stacked, the chrome left the court about 59px tall — inside the viewport but
@@ -128,7 +139,10 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
       <h1>Glass Court</h1>
       <p class="sub" id="modeLabel">Squash — full rules, one honest omission</p>
     </div>
-    <button id="rulesBtn" style="flex:0 0 auto;padding:7px 12px;font-size:12px">Rules</button>
+    <div style="display:flex;gap:6px;flex:0 0 auto">
+      <button id="muteBtn" aria-pressed="true" style="flex:0 0 auto;padding:7px 10px;font-size:12px">Sound on</button>
+      <button id="rulesBtn" style="flex:0 0 auto;padding:7px 12px;font-size:12px">Rules</button>
+    </div>
   </div>
 
   <div class="board">
@@ -159,6 +173,9 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
   <p>A real squash court is 6.4m wide and 9.75m deep, seen here from above. The strip at the top is the
      front wall, viewed head-on — every shot leaves a mark on it, so you can see why a rally ended.</p>
   <div class="modes">
+    <button data-mode="tournament"><b>Tournament</b><small>Climb a five-round ladder, from the club
+      to the championship. Each opponent is quicker than the last, and plays a faster ball. Your
+      progress is remembered.</small></button>
     <button data-mode="practice"><b>Practice (solo)</b><small>Rally alone against the front wall, the way
       players actually warm up. Counts your best streak.</small></button>
     <button data-mode="cpu-easy"><b>vs Computer — Club</b><small>Slow to the ball, loose length.</small></button>
@@ -168,6 +185,16 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
       nick.</small></button>
     <button data-mode="human"><b>2 Players</b><small>Same keyboard. WASD + Space against Arrows +
       Enter.</small></button>
+  </div>
+</div></dialog>
+
+<dialog id="tourDlg"><div class="dlg">
+  <h2>The ladder</h2>
+  <p id="tourNote"></p>
+  <ul id="tourList"></ul>
+  <div class="row">
+    <button id="tourReset">Start over</button>
+    <button id="tourPlay" class="primary">Play</button>
   </div>
 </div></dialog>
 
@@ -271,21 +298,149 @@ const mx=x=>ox+x*PPM, my=y=>oy+y*PPM;
 
 let S=null, marks=[], keys={}, raf=0, last=0;
 
-function newState(mode){
+function newState(mode,tourRound){
   const cpu={'cpu-easy':{sp:3.6,react:.34,err:.30,reach:1.05},
              'cpu-med':{sp:4.7,react:.20,err:.17,reach:1.15},
              'cpu-hard':{sp:5.9,react:.10,err:.07,reach:1.28}}[mode];
-  return {mode,cpu,
+  return {mode,cpu,tourRound:tourRound??null,
     phase:'serve', // serve | rally | dead | over
     pts:[0,0], games:[0,0], gameNo:1, server:0, box:0, // box 0=right,1=left
     striker:0, floorB:0, frontOK:false, lastHitBy:-1, serveShot:false,
     streak:0, best:0, msg:'', msgOk:false, deadT:0, autoServe:0,
+    gamesToWin: tourRound!=null ? 2 : 3,
     P:[{x:C.W*.5,y:6.6,vx:0,vy:0,sw:0,cool:0,phase:0,face:-Math.PI/2,lob:false},{x:C.W*.5,y:3.2,vx:0,vy:0,sw:0,cool:0,phase:0,face:-Math.PI/2,lob:false}],
     B:{x:0,y:0,z:0,vx:0,vy:0,vz:0,live:false}};
 }
 
 function solo(){return S.mode==='practice';}
-function names(){return solo()?['You','—']:S.mode==='human'?['Player 1','Player 2']:['You','Computer'];}
+function names(){
+  if(solo()) return ['You','—'];
+  if(S.mode==='human') return ['Player 1','Player 2'];
+  return ['You', S.tourRound!=null ? LADDER[S.tourRound].name : 'Computer'];
+}
+
+
+// ── sound ──────────────────────────────────────────────────────────────────
+// Synthesised, not sampled: the repo premise is one self-contained file, and
+// a squash court is mostly short percussive noise anyway — a ball strike is a
+// filtered noise burst with a pitched thump under it, which is cheaper to
+// synthesise than to ship.
+let actx=null, muted=false;
+try{ muted = localStorage.getItem('gc-muted')==='1'; }catch{}   // private mode throws
+
+function audioCtx(){
+  // Created lazily on the first gesture: browsers refuse to start audio before
+  // the user has interacted, and choosing a mode is that interaction.
+  if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch{ return null; } }
+  if(actx.state==='suspended') actx.resume().catch(()=>{});
+  return actx;
+}
+
+/** A short percussive tone. `sweep` bends the pitch across the note. */
+function tone(freq,dur,{type='triangle',gain=.18,sweep=0,delay=0}={}){
+  if(muted) return; const a=audioCtx(); if(!a) return;
+  const t=a.currentTime+delay, o=a.createOscillator(), g=a.createGain();
+  o.type=type; o.frequency.setValueAtTime(freq,t);
+  if(sweep) o.frequency.exponentialRampToValueAtTime(Math.max(40,freq+sweep),t+dur);
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(gain,t+.005);
+  g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+.03);
+}
+
+/** Filtered noise burst — the body of any impact. */
+function burst(dur,{gain=.2,freq=900,q=1,delay=0}={}){
+  if(muted) return; const a=audioCtx(); if(!a) return;
+  const t=a.currentTime+delay, n=Math.max(1,Math.floor(a.sampleRate*dur));
+  const buf=a.createBuffer(1,n,a.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);   // decaying white noise
+  const src=a.createBufferSource(); src.buffer=buf;
+  const bp=a.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq; bp.Q.value=q;
+  const g=a.createGain(); g.gain.value=gain;
+  src.connect(bp).connect(g).connect(a.destination); src.start(t);
+}
+
+const SFX={
+  racket:()=>{ burst(.05,{freq:2400,q:.8,gain:.13}); tone(300,.05,{gain:.08,sweep:-120}); },
+  front: ()=>{ burst(.07,{freq:820,q:1.2,gain:.17}); tone(175,.07,{gain:.10,sweep:-70}); },
+  side:  ()=>{ burst(.045,{freq:600,q:1.5,gain:.08}); },
+  floor: ()=>{ burst(.04,{freq:400,q:1.7,gain:.07}); },
+  // The tin is the sound you learn to dread — deliberately the ugliest here.
+  tin:   ()=>{ tone(150,.28,{type:'square',gain:.13,sweep:-60}); burst(.15,{freq:330,q:.7,gain:.13}); },
+  out:   ()=>{ tone(720,.16,{type:'sawtooth',gain:.09,sweep:-400}); },
+  won:   ()=>{ tone(660,.10,{gain:.12}); tone(880,.14,{gain:.12,delay:.09}); },
+  lost:  ()=>{ tone(330,.12,{gain:.10}); tone(247,.18,{gain:.10,delay:.10}); },
+  game:  ()=>{ [523,659,784].forEach((f,i)=>tone(f,.16,{gain:.13,delay:i*.11})); },
+  match: ()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,.22,{gain:.14,delay:i*.13})); },
+};
+
+function setMuted(v){
+  muted=v;
+  try{ localStorage.setItem('gc-muted',v?'1':'0'); }catch{}
+  const b=$('muteBtn');
+  if(b){ b.textContent=v?'Sound off':'Sound on'; b.setAttribute('aria-pressed',String(!v)); }
+}
+
+
+// ── tournament ─────────────────────────────────────────────────────────────
+// A reason to come back, which a single exhibition match does not give you.
+// Five rounds, each a real opponent with its own difficulty AND its own ball —
+// the ball is half the difficulty, so climbing the ladder speeds the game up
+// as well as sharpening the opponent.
+//
+// Matches here are best of three rather than best of five: a full five-game
+// match at PAR 11 is a long sitting for a browser game, and a ladder people
+// abandon halfway is worth nothing.
+const LADDER=[
+  {name:'Ravi Menon',        round:'Club ladder',  cpu:'cpu-easy', ball:'blue',
+   style:'Steady length, very little pace. A gentle introduction.'},
+  {name:'Tom Whitfield',     round:'County',       cpu:'cpu-easy', ball:'red',
+   style:'Hits hard, places loosely. Punish anything short.'},
+  {name:'Aisha Rahman',      round:'Regional',     cpu:'cpu-med',  ball:'red',
+   style:'Covers the court and waits for a loose ball.'},
+  {name:'Diego Castellanos', round:'National',     cpu:'cpu-med',  ball:'yellow',
+   style:'Takes the ball early. The double yellow gives you no time.'},
+  {name:'Nadia Farouk',      round:'Championship', cpu:'cpu-hard', ball:'yellow',
+   style:'Finds the nick from anywhere. Good luck.'},
+];
+
+function loadTour(){
+  try{ const r=JSON.parse(localStorage.getItem('gc-tour')||'{}');
+       return {round:Math.min(LADDER.length,Math.max(0,r.round|0))}; }
+  catch{ return {round:0}; }
+}
+function saveTour(){ try{ localStorage.setItem('gc-tour',JSON.stringify(tour)); }catch{} }
+let tour=loadTour();
+
+/** Called when a tournament match ends. Winning advances; losing replays. */
+function finishTournamentMatch(won){
+  const beaten=LADDER[S.tourRound];
+  if(won && S.tourRound===tour.round){ tour.round++; saveTour(); }
+  renderLadder(won?`You beat ${beaten.name}.`:`${beaten.name} takes the match. Have another go.`);
+  $('tourDlg').showModal();
+}
+
+function renderLadder(note){
+  const done=tour.round>=LADDER.length;
+  $('tourNote').textContent = note || (done
+    ? 'You have beaten the whole ladder.'
+    : 'Beat each opponent to move up. Best of three games.');
+  $('tourList').innerHTML = LADDER.map((o,i)=>{
+    const state = i<tour.round?'beaten' : i===tour.round?'next' : 'locked';
+    const mark  = state==='beaten'?'✓' : state==='next'?'▸' : '·';
+    return `<li class="rung ${state}"><span class="mark">${mark}</span>
+      <span><b>${o.round} — ${o.name}</b><small>${o.style}</small></span></li>`;
+  }).join('');
+  $('tourPlay').textContent = done ? 'Play the champion again' : `Play ${LADDER[Math.min(tour.round,LADDER.length-1)].name}`;
+  $('tourReset').hidden = tour.round===0;
+}
+
+function startTournamentMatch(){
+  const i=Math.min(tour.round,LADDER.length-1);
+  $('tourDlg').close();
+  setBall(LADDER[i].ball);
+  start(LADDER[i].cpu, i);
+}
 
 // ── serve setup ────────────────────────────────────────────────────────────
 function setupServe(){
@@ -336,7 +491,7 @@ function swing(i,lob){
   if(d>REACH||b.z>MAX_REACH_H) return;
   if(S.floorB>1) return;
 
-  p.cool=.22; p.sw=.16; p.lob=lob;
+  p.cool=.22; p.sw=.16; p.lob=lob; SFX.racket();
   const aim=(p.vx/5)*.55 + (Math.random()-.5)*.22;   // your movement steers it
   const t=lob?BALL().lob:BALL().drive;
   const tz=lob?3.3:C.TIN+.35+Math.random()*.85;
@@ -351,7 +506,7 @@ function cpuSwing(i){
   if(Math.hypot(b.x-p.x,b.y-p.y)>c.reach||b.z>MAX_REACH_H||S.floorB>1) return;
   const bad=Math.random()<c.err;                   // sometimes finds the tin or the out line
   const lob=Math.random()<.22;
-  p.cool=.22; p.sw=.16; p.lob=lob;                 // after `lob` exists — it is a const here,
+  p.cool=.22; p.sw=.16; p.lob=lob; SFX.racket();    // after `lob` exists — it is a const here,
                                                    // not a parameter as it is in swing()
   const t=lob?BALL().lob:BALL().drive;
   const tz=bad?(Math.random()<.55?C.TIN-.12:C.FW_OUT+.18):(lob?3.3:C.TIN+.4+Math.random()*.9);
@@ -371,13 +526,17 @@ function point(winner,why,ok){
   S.pts[winner]++;
   const w=S.pts[winner], l=S.pts[1-winner];
   S.msg=`${why} Point to ${names()[winner]}.`; S.msgOk=!!ok;
+  (winner===0?SFX.won:SFX.lost)();
   if(w>=11&&w-l>=2){
     S.games[winner]++;
-    if(S.games[winner]>=3){
-      S.phase='over';
+    if(S.games[winner]>=S.gamesToWin){
+      S.phase='over'; SFX.match();
       S.msg=`${names()[winner]} wins the match ${S.games[0]}–${S.games[1]}.`;
-      S.deadT=1e9; return;
+      S.deadT=1e9;
+      if(S.tourRound!=null) setTimeout(()=>finishTournamentMatch(winner===0),900);
+      return;
     }
+    SFX.game();
     S.msg=`${why} ${names()[winner]} takes game ${S.gameNo}, ${w}–${l}.`;
     S.gameNo++; S.pts=[0,0]; S.deadT=2.2;
   }
@@ -395,29 +554,30 @@ function stepBall(dt){
   if(b.y<=0){
     b.y=0; b.vy=-b.vy*WALL_E;
     marks.push({x:b.x,z:b.z,t:1});
-    if(b.z<C.TIN)  return point(solo()?0:1-S.striker,'Down — the ball hit the tin.');
-    if(b.z>C.FW_OUT) return point(solo()?0:1-S.striker,'Out — above the front-wall line.');
+    if(b.z<C.TIN)  { SFX.tin(); return point(solo()?0:1-S.striker,'Down — the ball hit the tin.'); }
+    if(b.z>C.FW_OUT) { SFX.out(); return point(solo()?0:1-S.striker,'Out — above the front-wall line.'); }
     if(S.serveShot&&b.z<C.SERVE_LINE)
-      return point(solo()?0:1-S.striker,'Fault — the serve was below the service line.');
+      { SFX.out(); return point(solo()?0:1-S.striker,'Fault — the serve was below the service line.'); }
+    SFX.front();
     S.frontOK=true;
     if(solo()){S.streak++; if(S.streak>S.best)S.best=S.streak;}
   }
   // back wall
   if(b.y>=C.L){
-    if(b.z>C.BW_OUT) return point(solo()?0:1-S.striker,'Out — over the back-wall line.');
-    b.y=C.L; b.vy=-b.vy*WALL_E;
+    if(b.z>C.BW_OUT) { SFX.out(); return point(solo()?0:1-S.striker,'Out — over the back-wall line.'); }
+    b.y=C.L; b.vy=-b.vy*WALL_E; SFX.side();
   }
   // side walls
   if(b.x<=0||b.x>=C.W){
-    if(b.z>outHeightAt(b.y)) return point(solo()?0:1-S.striker,'Out — above the side-wall line.');
-    b.x=b.x<=0?0:C.W; b.vx=-b.vx*WALL_E;
+    if(b.z>outHeightAt(b.y)) { SFX.out(); return point(solo()?0:1-S.striker,'Out — above the side-wall line.'); }
+    b.x=b.x<=0?0:C.W; b.vx=-b.vx*WALL_E; SFX.side();
   }
   // ceiling
   if(b.z>=C.FW_OUT){b.z=C.FW_OUT; b.vz=-Math.abs(b.vz)*.5;}
 
   // floor
   if(b.z<=0&&b.vz<0){
-    b.z=0; b.vz=-b.vz*BALL().floorE; b.vx*=.94; b.vy*=.94; S.floorB++;
+    b.z=0; b.vz=-b.vz*BALL().floorE; b.vx*=.94; b.vy*=.94; S.floorB++; SFX.floor();
     if(!S.frontOK)
       return point(solo()?0:1-S.striker,'Down — the ball never reached the front wall.');
     if(S.serveShot&&S.floorB===1){
@@ -647,9 +807,11 @@ function sync(){
   $('serveBtn').disabled = S.phase==='rally' || S.autoServe>0;
 }
 
-function start(mode){
-  S=newState(mode); marks=[];
-  $('modeLabel').textContent={'practice':'Solo practice — rally against the front wall',
+function start(mode,tourRound){
+  S=newState(mode,tourRound); marks=[];
+  $('modeLabel').textContent = tourRound!=null
+    ? `${LADDER[tourRound].round} — ${LADDER[tourRound].name}, best of 3`
+    : {'practice':'Solo practice — rally against the front wall',
     'cpu-easy':'vs Computer — Club','cpu-med':'vs Computer — County',
     'cpu-hard':'vs Computer — Pro','human':'Two players, one keyboard'}[mode];
   $('hint').innerHTML = mode==='human'
@@ -716,12 +878,18 @@ document.querySelectorAll('[data-ball]').forEach(b=>b.onclick=()=>setBall(b.data
 
 $('serveBtn').onclick=()=>{if(!S)return;
   if(S.phase==='over')start(S.mode); else if(S.phase==='serve'&&(solo()||S.server===0||S.mode==='human'))serve();};
+$('muteBtn').onclick=()=>setMuted(!muted);
 $('menuBtn').onclick=()=>$('menuDlg').showModal();
 $('rulesBtn').onclick=()=>$('rulesDlg').showModal();
-for(const d of [$('menuDlg'),$('rulesDlg')])
+for(const d of [$('menuDlg'),$('rulesDlg'),$('tourDlg')])
   d.addEventListener('click',e=>{if(e.target===d)d.close();});
-document.querySelectorAll('[data-mode]').forEach(b=>
-  b.onclick=()=>{$('menuDlg').close(); start(b.dataset.mode);});
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
+  $('menuDlg').close();
+  if(b.dataset.mode==='tournament'){ renderLadder(); $('tourDlg').showModal(); }
+  else start(b.dataset.mode);
+});
+$('tourPlay').onclick=startTournamentMatch;
+$('tourReset').onclick=()=>{ tour={round:0}; saveTour(); renderLadder('Back to the club ladder.'); };
 
 /**
  * Read-only handle for the browser tests (test/browser.spec.mjs).
@@ -732,9 +900,12 @@ document.querySelectorAll('[data-mode]').forEach(b=>
  * serve the CPU was failing to make.
  */
 window.__squash={get state(){return S;},get ppm(){return PPM;},
-                 get origin(){return {ox,oy};},get ball(){return ballKey;}};
+                 get origin(){return {ox,oy};},get ball(){return ballKey;},
+                 get muted(){return muted;},get tour(){return {...tour};},
+                 get ladder(){return LADDER.map(o=>({...o}));},
+                 get audioState(){return actx?actx.state:null;}};
 
-layout(); setBall(ballKey); start('cpu-easy');
+layout(); setMuted(muted); setBall(ballKey); start('cpu-easy');
 // Re-fit on rotate, resize, and when the mobile address bar shows or hides.
 addEventListener('resize',layout);
 addEventListener('orientationchange',()=>setTimeout(layout,120)); $('menuDlg').showModal(); raf=requestAnimationFrame(frame);

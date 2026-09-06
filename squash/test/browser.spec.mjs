@@ -237,6 +237,100 @@ test('the computer serves itself, so the game never stalls', async ({ page }) =>
     .not.toBe('serve');
 });
 
+// ── sound ─────────────────────────────────────────────────────────────────
+test.describe('sound', () => {
+  test('mutes, and remembers it across a reload', async ({ page }) => {
+    await open(page);
+    await choose(page, 'cpu-easy');
+    await expect(page.locator('#muteBtn')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.click('#muteBtn');
+    await expect(page.locator('#muteBtn')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#muteBtn')).toHaveText('Sound off');
+
+    await page.reload();
+    await page.waitForFunction(() => !!window.__squash?.state);
+    await expect(page.locator('#muteBtn'), 'the mute should survive a reload')
+      .toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('playing produces audio without throwing', async ({ page }) => {
+    // Chrome refuses to start audio before a gesture, and every sound here is
+    // fired from deep inside the game loop — so a mistake would surface as a
+    // console error mid-rally rather than anywhere a unit test would look.
+    const errors = await open(page);
+    await choose(page, 'cpu-easy');
+    await page.click('#serveBtn');
+    await page.waitForTimeout(2500);
+    expect(errors).toEqual([]);
+    expect(await page.evaluate(() => window.__squash.audioState),
+      'the audio context should be running after a gesture').not.toBe('suspended');
+  });
+});
+
+// ── tournament ────────────────────────────────────────────────────────────
+test.describe('tournament', () => {
+  test('shows a five-round ladder with the first round next', async ({ page }) => {
+    await open(page);
+    await page.click('[data-mode="tournament"]');
+    await expect(page.locator('#tourDlg')).toBeVisible();
+    await expect(page.locator('#tourList .rung')).toHaveCount(5);
+    await expect(page.locator('.rung.next')).toContainText('Ravi Menon');
+    await expect(page.locator('#tourPlay')).toContainText('Ravi Menon');
+  });
+
+  test('starting a round sets that opponent, their ball, and best of three', async ({ page }) => {
+    await open(page);
+    await page.click('[data-mode="tournament"]');
+    await page.click('#tourPlay');
+    await expect(page.locator('#tourDlg')).not.toBeVisible();
+
+    expect(await page.evaluate(() => window.__squash.state.tourRound)).toBe(0);
+    expect(await page.evaluate(() => window.__squash.state.gamesToWin),
+      'tournament matches are best of three').toBe(2);
+    expect(await page.evaluate(() => window.__squash.ball)).toBe('blue');
+    await expect(page.locator('#n1'), 'the scoreboard should name the opponent')
+      .toContainText('Ravi Menon');
+    await expect(page.locator('#modeLabel')).toContainText('Club ladder');
+  });
+
+  test('an exhibition match is still best of five', async ({ page }) => {
+    await open(page);
+    await choose(page, 'cpu-easy');
+    expect(await page.evaluate(() => window.__squash.state.gamesToWin)).toBe(3);
+    expect(await page.evaluate(() => window.__squash.state.tourRound)).toBe(null);
+  });
+
+  test('progress is remembered, and Start over clears it', async ({ page }) => {
+    await open(page);
+    // Winning a match legitimately would take minutes, so the progress itself
+    // is set the way the game stores it — this asserts the ladder *reads* its
+    // saved progress, which is the part that makes a tournament worth playing.
+    await page.evaluate(() => localStorage.setItem('gc-tour', JSON.stringify({ round: 2 })));
+    await page.reload();
+    await page.waitForFunction(() => !!window.__squash?.state);
+
+    await page.click('[data-mode="tournament"]');
+    await expect(page.locator('.rung.beaten')).toHaveCount(2);
+    await expect(page.locator('.rung.next')).toContainText('Aisha Rahman');
+
+    await page.click('#tourReset');
+    await expect(page.locator('.rung.beaten')).toHaveCount(0);
+    await expect(page.locator('.rung.next')).toContainText('Ravi Menon');
+  });
+
+  test('the last round is the hardest opponent on the fastest ball', async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => localStorage.setItem('gc-tour', JSON.stringify({ round: 4 })));
+    await page.reload();
+    await page.waitForFunction(() => !!window.__squash?.state);
+    await page.click('[data-mode="tournament"]');
+    await page.click('#tourPlay');
+    expect(await page.evaluate(() => window.__squash.state.mode)).toBe('cpu-hard');
+    expect(await page.evaluate(() => window.__squash.ball)).toBe('yellow');
+  });
+});
+
 // ── UI ────────────────────────────────────────────────────────────────────
 test.describe('interface', () => {
   test('choosing a mode starts that mode', async ({ page }) => {

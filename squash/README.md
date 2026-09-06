@@ -7,6 +7,29 @@ landed relative to the tin and the out line.
 Modes: solo practice (rally alone, tracks your best streak), two players on one
 keyboard, and three computer difficulties.
 
+## Tournament
+
+A five-round ladder — Club, County, Regional, National, Championship — against
+named opponents who get quicker *and* play a faster ball as you climb, since the
+ball is half the difficulty. Progress is kept in `localStorage`, so the ladder
+survives a reload; **Start over** clears it.
+
+Ladder matches are best of **three** rather than five. A full five-game match at
+PAR 11 is a long sitting for a browser game, and a ladder people abandon halfway
+is worth nothing. Exhibition matches against the computer are still best of five.
+
+## Sound
+
+Synthesised with the Web Audio API rather than shipped as files, so the game
+stays one self-contained page. A squash court is mostly short percussive noise
+anyway: every impact is a filtered noise burst with a pitched thump under it.
+The tin gets deliberately the ugliest sound in the set, because it is the one
+you learn to dread.
+
+The audio context is created lazily on the first gesture — browsers refuse to
+start audio before the user has interacted, and choosing a mode is that
+interaction. Mute is remembered in `localStorage`.
+
 ## Ball speed
 
 Real squash balls are graded by a coloured dot, and the grading is exactly how
