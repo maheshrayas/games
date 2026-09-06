@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "name": "games",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node squash/test/simulate.mjs && playwright test",
+    "test:sim": "node squash/test/simulate.mjs",
+    "test:browser": "playwright test"
+  }
+}

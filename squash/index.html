@@ -93,6 +93,33 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
 .dot.blue{background:#2C6E9B}.dot.red{background:#B23A2E}
 .dot.yellow{background:#E8C33A;box-shadow:inset 0 -4px 0 #C9A21F}
 .hint{font-size:11.5px;color:var(--ink-soft);text-align:center;line-height:1.5}
+
+/* A landscape phone has height to spare nowhere and width to spare everywhere.
+   Stacked, the chrome left the court about 59px tall — inside the viewport but
+   far too small to play. Side by side, the court gets the full height and the
+   controls take the width that was going unused. */
+@media (orientation:landscape) and (max-height:560px){
+  .stage{max-width:none;display:grid;gap:8px;
+    grid-template-columns:1fr minmax(190px,250px);
+    grid-template-rows:auto auto auto auto 1fr auto;
+    grid-template-areas:
+      "court head"
+      "court board"
+      "court ballsel"
+      "court status"
+      "court controls"
+      "court hint";}
+  .courtwrap{grid-area:court}
+  .head{grid-area:head}
+  .board{grid-area:board;padding:5px 10px}
+  .ballsel{grid-area:ballsel}
+  .status{grid-area:status}
+  .row{grid-area:controls;align-self:start}
+  .hint{grid-area:hint}
+  h1{font-size:18px}
+  .sub{display:none}          /* the tagline is the first thing to go */
+  .pts{font-size:26px}
+}
 </style>
 
 <div class="stage">
@@ -695,6 +722,17 @@ for(const d of [$('menuDlg'),$('rulesDlg')])
   d.addEventListener('click',e=>{if(e.target===d)d.close();});
 document.querySelectorAll('[data-mode]').forEach(b=>
   b.onclick=()=>{$('menuDlg').close(); start(b.dataset.mode);});
+
+/**
+ * Read-only handle for the browser tests (test/browser.spec.mjs).
+ *
+ * Deliberately getters, not the objects themselves: a test may observe state,
+ * never reach in and arrange the state it wants to see. Doing exactly that is
+ * how the headless test came to pass on a game that was hung — it forced the
+ * serve the CPU was failing to make.
+ */
+window.__squash={get state(){return S;},get ppm(){return PPM;},
+                 get origin(){return {ox,oy};},get ball(){return ballKey;}};
 
 layout(); setBall(ballKey); start('cpu-easy');
 // Re-fit on rotate, resize, and when the mobile address bar shows or hides.

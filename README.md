@@ -8,6 +8,17 @@ Open the file, or serve the directory, and it runs.
 |---|---|
 | [`squash/`](squash/) | Squash, played from above. Solo practice, local two-player, and three computer difficulties. |
 
+## Tests
+
+```bash
+npm install     # once, for the browser suite
+npm test
+```
+
+Each game's own `test/` directory holds a dependency-free headless suite plus
+Playwright browser tests. The browser tests drive the Chrome already installed
+rather than downloading one.
+
 ## Running one
 
 ```bash
