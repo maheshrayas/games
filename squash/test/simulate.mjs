@@ -57,17 +57,43 @@ let failed = 0;
 for (const mode of ['practice', 'cpu-easy', 'cpu-med', 'cpu-hard', 'human']) {
   try {
     api.start(mode);
-    api.serve();
-    let rallies = 0;
+    let rallies = 0, stall = 0, worstStall = 0, wasDead = false;
+    const dt = 1 / 60;
     for (let f = 0; f < FRAMES; f++) {
-      api.stepPlayers(1 / 60);
-      api.stepBall(1 / 60);
+      const S = api.S;
+      // Mirror frame()'s state machine rather than forcing a serve every
+      // rally — forcing it is what hid the CPU never serving at all.
+      if (S.phase === 'dead') { S.deadT -= dt; if (S.deadT <= 0) api.setupServe(); }
+      if (S.phase === 'serve' && S.autoServe > 0) {
+        S.autoServe -= dt;
+        if (S.autoServe <= 0) api.serve();
+      } else if (S.phase === 'serve') {
+        // A human would press Space here — but only when it is their serve.
+        const mine = mode === 'practice' || mode === 'human' || S.server === 0;
+        if (mine) api.serve();
+      }
+      if (S.phase === 'serve') { stall++; worstStall = Math.max(worstStall, stall); }
+      else stall = 0;
+
+      api.stepPlayers(dt);
+      api.stepBall(dt);
       api.draw();
-      if (api.S.phase === 'dead') { rallies++; api.setupServe(); api.serve(); }
-      if (api.S.phase === 'over') break;
+      if (S.phase === 'dead' && !wasDead) rallies++;   // count transitions, not frames
+      wasDead = S.phase === 'dead';
+      if (S.phase === 'over') break;
     }
-    if (rallies === 0) { console.log(`FAIL ${mode}: no rally ever resolved`); failed++; }
-    else console.log(`ok   ${mode.padEnd(10)} ${FRAMES} frames, ${rallies} rallies`);
+    // Two seconds of frames sitting in 'serve' means nobody can put the ball
+    // in play: the game is hung, which is exactly how the missing CPU serve
+    // presented.
+    if (worstStall > 120) {
+      console.log(`FAIL ${mode}: stuck in 'serve' for ${worstStall} frames — nobody serves`);
+      failed++;
+    } else if (rallies === 0) {
+      console.log(`FAIL ${mode}: no rally ever resolved`);
+      failed++;
+    } else {
+      console.log(`ok   ${mode.padEnd(10)} ${FRAMES} frames, ${rallies} rallies, worst serve wait ${worstStall}f`);
+    }
   } catch (e) {
     console.log(`FAIL ${mode.padEnd(10)} ${e.constructor.name}: ${e.message}`);
     failed++;

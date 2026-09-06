@@ -225,7 +225,7 @@ function newState(mode){
     phase:'serve', // serve | rally | dead | over
     pts:[0,0], games:[0,0], gameNo:1, server:0, box:0, // box 0=right,1=left
     striker:0, floorB:0, frontOK:false, lastHitBy:-1, serveShot:false,
-    streak:0, best:0, msg:'', msgOk:false, deadT:0,
+    streak:0, best:0, msg:'', msgOk:false, deadT:0, autoServe:0,
     P:[{x:C.W*.5,y:6.6,vx:0,vy:0,sw:0,cool:0,phase:0,face:-Math.PI/2,lob:false},{x:C.W*.5,y:3.2,vx:0,vy:0,sw:0,cool:0,phase:0,face:-Math.PI/2,lob:false}],
     B:{x:0,y:0,z:0,vx:0,vy:0,vz:0,live:false}};
 }
@@ -243,6 +243,11 @@ function setupServe(){
   Object.assign(S.B,{x:bx,y:C.SHORT+C.BOX/2,z:.9,vx:0,vy:0,vz:0,live:false});
   S.striker=s; S.floorB=0; S.frontOK=false; S.lastHitBy=-1; S.serveShot=true;
   S.phase='serve';
+  // The computer has to serve itself. S.server follows whoever won the rally,
+  // but serving was only ever triggered by the Serve button or your keypress,
+  // both of which require S.server===0 — so the first point the CPU won left
+  // the game sitting in 'serve' with no ball ever put in play.
+  S.autoServe = (!solo() && S.mode!=='human' && S.server===1) ? 1.0 : 0;
   S.msg=solo()?'Press Space to feed yourself a ball.'
     :`${names()[s]} to serve from the ${right?'right':'left'} box.`;
   S.msgOk=false;
@@ -564,6 +569,7 @@ function frame(t){
   if(S){
     if(S.phase==='rally'||S.phase==='serve'){stepPlayers(dt); stepBall(dt);}
     if(S.phase==='dead'){S.deadT-=dt; if(S.deadT<=0) setupServe();}
+    if(S.phase==='serve'&&S.autoServe>0){S.autoServe-=dt; if(S.autoServe<=0) serve();}
     for(let i=marks.length-1;i>=0;i--){marks[i].t-=dt*.22; if(marks[i].t<=0)marks.splice(i,1);}
     if(marks.length>26) marks.splice(0,marks.length-26);
     draw(); sync();
@@ -584,7 +590,7 @@ function sync(){
   const st=$('status'); st.textContent=S.msg||(S.phase==='rally'?'Rally on.':'');
   st.className='status'+(S.msgOk?' ok':'');
   $('serveBtn').textContent=S.phase==='over'?'New match':'Serve';
-  $('serveBtn').disabled=S.phase==='rally';
+  $('serveBtn').disabled = S.phase==='rally' || S.autoServe>0;
 }
 
 function start(mode){
