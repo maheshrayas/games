@@ -67,6 +67,21 @@ The racket orbits the body in the *court* plane, squashed vertically to match
 the viewing angle, so a forehand across the court sweeps across the court rather
 than across the screen.
 
+## Tests
+
+```bash
+node squash/test/simulate.mjs
+```
+
+Runs the simulation headlessly for 4000 frames in every mode against a stub DOM
+and canvas, asserting no throw and that rallies actually resolve.
+
+It exists because a syntax check is not an execution check. A
+`Cannot access 'lob' before initialization` shipped in the computer's swing: the
+file parsed perfectly and rendered perfectly, and the throw only happened on the
+first frame the CPU tried to hit the ball — which is why it reached a browser.
+The test reproduces that failure on the old code and passes on the fix.
+
 ## Controls
 
 - **Player 1** — `WASD` to move, `Space` to hit (hold it to lob)

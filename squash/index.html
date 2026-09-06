@@ -285,9 +285,10 @@ function cpuSwing(i){
   const p=S.P[i],b=S.B,c=S.cpu;
   if(p.cool>0||S.lastHitBy===i) return;
   if(Math.hypot(b.x-p.x,b.y-p.y)>c.reach||b.z>MAX_REACH_H||S.floorB>1) return;
-  p.cool=.22; p.sw=.16; p.lob=lob;
   const bad=Math.random()<c.err;                   // sometimes finds the tin or the out line
   const lob=Math.random()<.22;
+  p.cool=.22; p.sw=.16; p.lob=lob;                 // after `lob` exists — it is a const here,
+                                                   // not a parameter as it is in swing()
   const t=lob?BALL().lob:BALL().drive;
   const tz=bad?(Math.random()<.55?C.TIN-.12:C.FW_OUT+.18):(lob?3.3:C.TIN+.4+Math.random()*.9);
   const tx=Math.min(C.W-.3,Math.max(.3,Math.random()<.6?(b.x<C.W/2?.7:C.W-.7):Math.random()*C.W));
