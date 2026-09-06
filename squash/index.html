@@ -25,14 +25,20 @@
   --shadow:rgba(0,0,0,.5);
 }
 *{box-sizing:border-box}
+/* dvh, not vh: on mobile Safari vh is the *largest* viewport, so a 100vh
+   column sits under the address bar and scrolls anyway. */
+html,body{height:100%;overflow:hidden}
 body{background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
-  margin:0;padding:16px;display:flex;justify-content:center;min-height:100vh;-webkit-text-size-adjust:100%}
-.stage{width:100%;max-width:460px;display:flex;flex-direction:column;gap:12px}
-h1{font-family:"Barlow Condensed",Impact,sans-serif;font-weight:700;font-size:26px;letter-spacing:.02em;
+  margin:0;padding:10px;display:flex;justify-content:center;height:100dvh;-webkit-text-size-adjust:100%}
+.stage{width:100%;max-width:460px;height:100%;display:flex;flex-direction:column;gap:8px}
+/* The court is the only element that flexes; everything else is its natural
+   height, so the court absorbs whatever is left rather than the page growing. */
+.courtwrap{flex:1 1 auto;min-height:0;position:relative}
+h1{font-family:"Barlow Condensed",Impact,sans-serif;font-weight:700;font-size:22px;letter-spacing:.02em;
   margin:0;text-transform:uppercase;line-height:1}
 .sub{color:var(--ink-soft);font-size:12.5px;margin:2px 0 0}
 .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
-.board{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:10px 14px;
+.board{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:7px 14px;
   display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 1px 2px var(--shadow)}
 .side{display:flex;flex-direction:column;gap:1px;min-width:0}
 .side.r{align-items:flex-end;text-align:right}
@@ -40,19 +46,19 @@ h1{font-family:"Barlow Condensed",Impact,sans-serif;font-weight:700;font-size:26
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
 .nm.serving{color:var(--accent)}
 .nm.serving::after{content:" ●";font-size:8px;vertical-align:middle}
-.pts{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:38px;line-height:.85;
+.pts{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:31px;line-height:.85;
   font-variant-numeric:tabular-nums}
 .games{font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
 .mid{text-align:center;font-size:10.5px;color:var(--ink-soft);letter-spacing:.1em;text-transform:uppercase;
   font-weight:600;flex-shrink:0}
-canvas{display:block;width:100%;border-radius:12px;background:var(--wall);
-  box-shadow:0 2px 10px var(--shadow);touch-action:none}
-.status{min-height:38px;background:var(--panel);border:1px solid var(--rule);border-radius:10px;
-  padding:9px 12px;font-size:13px;display:flex;align-items:center;gap:8px;line-height:1.35}
+canvas{position:absolute;inset:0;display:block;width:100%;height:100%;border-radius:12px;
+  background:var(--wall);box-shadow:0 2px 10px var(--shadow);touch-action:none}
+.status{min-height:0;background:var(--panel);border:1px solid var(--rule);border-radius:10px;
+  padding:7px 11px;font-size:12.5px;display:flex;align-items:center;gap:8px;line-height:1.3}
 .status b{color:var(--accent)}
 .status.ok b{color:var(--good)}
 .row{display:flex;gap:8px;flex-wrap:wrap}
-button{font-family:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;
+button{font-family:inherit;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;
   border:1px solid var(--rule);background:var(--panel);color:var(--ink);cursor:pointer;flex:1;
   min-width:0;transition:background .12s,border-color .12s}
 button:hover{border-color:var(--accent)}
@@ -106,7 +112,7 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
       <span class="games" id="g1">games 0</span></div>
   </div>
 
-  <canvas id="cv" width="440" height="700"></canvas>
+  <div class="courtwrap"><canvas id="cv"></canvas></div>
   <div class="ballsel" id="ballSel">
     <span class="lbl">Ball</span>
     <button data-ball="blue"   aria-pressed="false"><i class="dot blue"></i>Blue</button>
@@ -118,7 +124,6 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
     <button id="menuBtn">Change mode</button>
     <button id="serveBtn" class="primary">Serve</button>
   </div>
-  <p class="hint" id="ballNote"></p>
   <p class="hint" id="hint"></p>
 </div>
 
@@ -207,11 +212,33 @@ const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const $=id=>document.getElementById(id);
 
 // Front-wall elevation panel sits above the court; both share the court's width.
-let PAD=14, WALL_H=112, PPM=1, ox=0, oy=0;
+// VW/VH are the canvas box in CSS pixels — the backing store is scaled by the
+// device pixel ratio and the context is transformed to match, so all drawing
+// code below stays in CSS pixels and stays sharp on a retina screen.
+let PAD=10, WALL_H=100, PPM=1, ox=0, oy=0, VW=440, VH=700;
+
+/**
+ * Size the court to whatever space the flex layout left, rather than forcing
+ * the page to fit the court. The court's own 6.4 x 9.75 proportions are
+ * preserved: PPM is whichever of width or height runs out first.
+ */
 function layout(){
-  const w=cv.width;
-  PPM=(w-PAD*2)/C.W; ox=PAD; oy=PAD+WALL_H+10;
-  cv.height=oy+C.L*PPM+PAD;
+  const box=cv.getBoundingClientRect();
+  // Floor only guards a degenerate 0-sized box during first layout. Clamping
+  // *up* to a comfortable minimum would draw a scene larger than the element
+  // on a short screen, and the overflow would simply be clipped.
+  VW=Math.max(80,Math.round(box.width));
+  VH=Math.max(80,Math.round(box.height));
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=Math.round(VW*dpr); cv.height=Math.round(VH*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const gap=8;
+  // The wall panel scales with the viewport but never eats the court.
+  WALL_H=Math.max(56,Math.min(110,Math.round(VH*0.15)));
+  PPM=Math.min((VW-PAD*2)/C.W, (VH-PAD*2-WALL_H-gap)/C.L);
+  ox=(VW-C.W*PPM)/2;                       // centred, so a wide screen doesn't
+  oy=PAD+WALL_H+gap;                       // leave the court hugging one edge
 }
 const mx=x=>ox+x*PPM, my=y=>oy+y*PPM;
 
@@ -507,7 +534,7 @@ function drawPlayer(i,p){
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 function draw(){
   const wall=css('--wall'),wood=css('--wood'),woodDk=css('--wood-dk'),line=css('--line'),ink=css('--ink');
-  ctx.fillStyle=wall; ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.fillStyle=wall; ctx.fillRect(0,0,VW,VH);
 
   // ── front wall elevation (head-on) ──
   const wx=ox, wy=PAD, ww=C.W*PPM, wh=WALL_H, hz=z=>wy+wh-(z/C.FW_OUT)*wh;
@@ -641,8 +668,11 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('pointermove',e=>{if(touching)movePtr(e);});
 cv.addEventListener('pointerup',()=>touching=false);
 function movePtr(e){
-  if(!S)return; const r=cv.getBoundingClientRect(), sc=cv.width/r.width;
-  const x=((e.clientX-r.left)*sc-ox)/PPM, y=((e.clientY-r.top)*sc-oy)/PPM;
+  if(!S)return; const r=cv.getBoundingClientRect();
+  // The context is transformed by the DPR, so pointer coordinates map
+  // straight from CSS pixels — no extra backing-store scale factor.
+  const sx=VW/r.width, sy=VH/r.height;
+  const x=((e.clientX-r.left)*sx-ox)/PPM, y=((e.clientY-r.top)*sy-oy)/PPM;
   S.P[0].x=Math.max(.25,Math.min(C.W-.25,x)); S.P[0].y=Math.max(.25,Math.min(C.L-.25,y));
 }
 
@@ -651,7 +681,9 @@ function setBall(k){
   for(const b of document.querySelectorAll('[data-ball]'))
     b.setAttribute('aria-pressed', String(b.dataset.ball===k));
   const B=BALLS[k];
-  $('ballNote').innerHTML=`<b>${B.label} — ${B.tier}.</b> ${B.note}`;
+  // Its own line used to sit under the court; it costs the court too much
+  // height for something read once, so it lands in the status bar instead.
+  if(S) { S.msg=`${B.label} — ${B.tier}. ${B.note}`; S.msgOk=false; }
 }
 document.querySelectorAll('[data-ball]').forEach(b=>b.onclick=()=>setBall(b.dataset.ball));
 
@@ -664,5 +696,8 @@ for(const d of [$('menuDlg'),$('rulesDlg')])
 document.querySelectorAll('[data-mode]').forEach(b=>
   b.onclick=()=>{$('menuDlg').close(); start(b.dataset.mode);});
 
-layout(); setBall(ballKey); start('cpu-easy'); $('menuDlg').showModal(); raf=requestAnimationFrame(frame);
+layout(); setBall(ballKey); start('cpu-easy');
+// Re-fit on rotate, resize, and when the mobile address bar shows or hides.
+addEventListener('resize',layout);
+addEventListener('orientationchange',()=>setTimeout(layout,120)); $('menuDlg').showModal(); raf=requestAnimationFrame(frame);
 </script>

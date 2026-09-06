@@ -82,6 +82,22 @@ file parsed perfectly and rendered perfectly, and the throw only happened on the
 first frame the CPU tried to hit the ball — which is why it reached a browser.
 The test reproduces that failure on the old code and passes on the fix.
 
+## Layout
+
+The page is a flex column pinned to the viewport, and the court is the only
+element that flexes — everything else keeps its natural height, so the court
+absorbs whatever is left rather than the page growing a scrollbar. `layout()`
+then picks a pixels-per-metre scale from whichever of width or height runs out
+first, so the court's real 6.4 × 9.75 proportions survive at any size.
+
+The canvas backing store is sized by device pixel ratio with the context
+transformed to match, so all drawing code is written in CSS pixels and still
+comes out sharp on a retina screen.
+
+Height is `100dvh`, not `100vh`: on mobile Safari `vh` refers to the *largest*
+viewport, so a `100vh` column sits underneath the address bar and scrolls
+anyway.
+
 ## Controls
 
 - **Player 1** — `WASD` to move, `Space` to hit (hold it to lob)
