@@ -205,28 +205,36 @@ test.describe('touch', () => {
 });
 
 // ── the hang ──────────────────────────────────────────────────────────────
-// Real time, not simulated: this one has to watch the game actually play, so
-// it is slower than the rest and gets a longer budget. Under full parallel
-// load a page competes for CPU and the game clock effectively slows, which is
-// why the wait is generous rather than tight.
 test('the computer serves itself, so the game never stalls', async ({ page }) => {
   test.slow();
   await open(page);
   await choose(page, 'cpu-easy');
-  // You always serve first, so the opening serve is ours to make; after that
-  // sit still. The computer wins the rally, becomes the server, and from then
-  // on has to serve itself — which is the thing that used to hang.
-  await page.click('#serveBtn');
-  await page.waitForFunction(() => window.__squash.state.pts[1] > 0,
-    null, { timeout: 60000, polling: 250 });
 
-  let stuck = 0;
-  for (let i = 0; i < 20; i++) {
+  // Serve whenever it is our serve. The Club computer puts roughly a third of
+  // its shots into the tin or out, so we win rallies too — and a test that
+  // served once and then idled would sit waiting for a serve it never made,
+  // which looks exactly like the hang it is meant to detect. Playing properly
+  // is the only way to reach the state under test.
+  const serveIfOurs = async (s) => {
+    if (s.phase === 'serve' && s.server === 0) await page.click('#serveBtn').catch(() => {});
+  };
+
+  // Play until the computer holds serve, which is the situation that used to
+  // freeze the game: nothing but the computer itself can put the ball in play.
+  let sawCpuServing = false;
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline && !sawCpuServing) {
     const s = await state(page);
-    stuck = s.phase === 'serve' ? stuck + 1 : 0;
-    expect(stuck, "stuck in 'serve' — nobody is putting the ball in play").toBeLessThan(8);
-    await page.waitForTimeout(250);
+    if (s.phase === 'serve' && s.server === 1) { sawCpuServing = true; break; }
+    await serveIfOurs(s);
+    await page.waitForTimeout(120);
   }
+  expect(sawCpuServing, 'the computer never came to serve, so nothing was tested').toBe(true);
+
+  // The assertion. Left alone, the computer must put the ball in play.
+  await expect
+    .poll(async () => (await state(page)).phase, { timeout: 8000, intervals: [100] })
+    .not.toBe('serve');
 });
 
 // ── UI ────────────────────────────────────────────────────────────────────
