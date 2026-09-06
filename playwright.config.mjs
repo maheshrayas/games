@@ -17,10 +17,11 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     ...devices['Desktop Chrome'],
-    // Use the Chrome already on the machine rather than downloading a
-    // Playwright build. Keeps the repo's "no heavy toolchain" premise, and a
-    // real Chrome is what players use anyway.
-    channel: 'chrome',
+    // Locally: drive the Chrome already on the machine, so a checkout needs no
+    // browser download. On CI: use Playwright's own pinned Chromium, so the run
+    // is reproducible and does not depend on whatever browser the runner image
+    // happens to ship that week.
+    channel: process.env.CI ? undefined : 'chrome',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },

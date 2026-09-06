@@ -1,0 +1,66 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push supersedes the first; no point finishing a run for a commit
+# that has already been replaced.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Runs first and on its own, because it needs no browser at all: if the
+      # simulation is broken, that is the signal, and there is no reason to
+      # spend two minutes installing Chromium to find out.
+      - name: Simulation tests
+        run: npm run test:sim
+
+      - run: npm ci
+
+      # Keyed on the resolved Playwright version, so a dependency bump misses
+      # the cache and installs the matching browser rather than reusing a stale
+      # one.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        # --with-deps installs the system libraries too, and those are not in
+        # the cache, so it still runs on a cache hit — just far more quickly.
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: npm run test:browser
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
