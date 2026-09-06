@@ -385,8 +385,16 @@ function stepPlayers(dt){
     let dx=0,dy=0;
     const human=(i===0)||(S.mode==='human'&&i===1);
     if(human&&S.phase!=='over'){
-      const k=i===0?{l:'a',r:'d',u:'w',d:'s'}:{l:'arrowleft',r:'arrowright',u:'arrowup',d:'arrowdown'};
-      if(keys[k.l])dx-=1; if(keys[k.r])dx+=1; if(keys[k.u])dy-=1; if(keys[k.d])dy+=1;
+      // Arrows are player 2's keys ONLY in two-player. In every other mode
+      // there is no player 2, so they are a second set for player 1 —
+      // which is what the on-screen hint has always promised.
+      const solo1=S.mode!=='human';
+      const k=i===1?{l:'arrowleft',r:'arrowright',u:'arrowup',d:'arrowdown'}
+                   :{l:'a',r:'d',u:'w',d:'s'};
+      if(keys[k.l]||(solo1&&i===0&&keys['arrowleft'] ))dx-=1;
+      if(keys[k.r]||(solo1&&i===0&&keys['arrowright']))dx+=1;
+      if(keys[k.u]||(solo1&&i===0&&keys['arrowup']   ))dy-=1;
+      if(keys[k.d]||(solo1&&i===0&&keys['arrowdown'] ))dy+=1;
     }else if(!solo()&&i===1&&S.B.live&&S.phase==='rally'){
       // Aim at where the ball will be, with a reaction delay baked into the speed.
       const b=S.B, tx=b.x+b.vx*S.cpu.react, ty=Math.max(1,Math.min(C.L-.4,b.y+b.vy*S.cpu.react));
@@ -606,7 +614,10 @@ addEventListener('keyup',e=>{
   if(!S)return;
   if(k===' '||k==='enter'){
     const lob=performance.now()-(held[k]||0)>230; delete held[k];
-    const i=k===' '?0:1;
+    // Same reasoning as the arrows above: Enter is player 2's hit key only
+    // when there is a player 2. Otherwise it is a second hit key for you,
+    // so the arrow-keys hand never has to reach across for Space.
+    const i=(S.mode==='human') ? (k===' '?0:1) : 0;
     if(S.mode==='human'||i===0){
       if(S.phase==='serve'&&S.server===i) serve();
       else if(S.phase==='rally') swing(i,lob);

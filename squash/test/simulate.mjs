@@ -48,7 +48,7 @@ const doc = { getElementById: () => elStub, querySelectorAll: () => [], addEvent
 
 const api = new Function(
   'document', 'getComputedStyle', 'requestAnimationFrame', 'addEventListener', 'performance',
-  js + '; return {setupServe,serve,stepPlayers,stepBall,swing,cpuSwing,draw,start,get S(){return S;}};',
+  js + '; return {setupServe,serve,stepPlayers,stepBall,swing,cpuSwing,draw,start,keys,get S(){return S;}};',
 )(doc, () => ({ getPropertyValue: () => '#000' }), noop, noop, { now: () => 0 });
 
 const FRAMES = 4000;
@@ -72,6 +72,35 @@ for (const mode of ['practice', 'cpu-easy', 'cpu-med', 'cpu-hard', 'human']) {
     console.log(`FAIL ${mode.padEnd(10)} ${e.constructor.name}: ${e.message}`);
     failed++;
   }
+}
+
+// ── control mapping ────────────────────────────────────────────────────────
+// The on-screen hint promises "WASD or arrows" outside two-player, and for a
+// while it was a lie: arrows were wired to player 2 only, so in solo and
+// vs-computer they did nothing at all.
+function movesOn(mode, key, who = 0) {
+  api.start(mode);
+  for (const k in api.keys) api.keys[k] = false;
+  const p = api.S.P[who];
+  const [x0, y0] = [p.x, p.y];
+  api.keys[key] = true;
+  for (let f = 0; f < 12; f++) api.stepPlayers(1 / 60);
+  api.keys[key] = false;
+  return Math.hypot(api.S.P[who].x - x0, api.S.P[who].y - y0) > 0.2;
+}
+
+const controls = [
+  ['cpu-easy', 'a',         0, true,  'WASD moves you vs the computer'],
+  ['cpu-easy', 'arrowleft', 0, true,  'arrows move you vs the computer'],
+  ['practice', 'arrowleft', 0, true,  'arrows move you in practice'],
+  ['human',    'a',         0, true,  'WASD moves player 1 in two-player'],
+  ['human',    'arrowleft', 0, false, 'arrows must NOT move player 1 in two-player'],
+  ['human',    'arrowleft', 1, true,  'arrows move player 2 in two-player'],
+];
+for (const [mode, key, who, want, label] of controls) {
+  const got = movesOn(mode, key, who);
+  if (got === want) console.log(`ok   ${label}`);
+  else { console.log(`FAIL ${label} (expected ${want}, got ${got})`); failed++; }
 }
 
 process.exit(failed ? 1 : 0);
