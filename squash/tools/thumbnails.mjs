@@ -30,6 +30,7 @@ const SIZES = [
   { name: 'thumb-512x512',   w: 512,  h: 512,  required: true },
   { name: 'thumb-200x120',   w: 200,  h: 120,  required: true },
   { name: 'promo-1280x720',  w: 1280, h: 720,  required: false },
+  { name: 'banner-1280x550', w: 1280, h: 550,  required: false },
 ];
 
 /**
