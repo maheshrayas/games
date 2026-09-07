@@ -20,7 +20,11 @@ import { pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const GAME = pathToFileURL(
+// Defaults to the file on disk — no server, and it reproduces the
+// no-Content-Type condition that once caused the mojibake. Point GAME_URL at a
+// deployment to run the same suite as a smoke test against it:
+//   GAME_URL=https://maheshrayas.github.io/games/squash/ npm run test:browser
+const GAME = process.env.GAME_URL || pathToFileURL(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'index.html'),
 ).href;
 
