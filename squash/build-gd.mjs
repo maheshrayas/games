@@ -56,6 +56,12 @@ window["GD_OPTIONS"] = {
       case "SDK_GAME_START":
         if (window.squashGame) window.squashGame.resume();
         break;
+      case "SDK_REWARDED_WATCH_COMPLETE":
+        // The one signal that means the ad was genuinely watched through.
+        // showAd('rewarded') also resolves, but their guide names this event
+        // as the reward trigger, so it is what the promise below waits for.
+        window.__gdRewardWatched = true;
+        break;
     }
   }
 };
@@ -88,7 +94,33 @@ window["GD_OPTIONS"] = {
     setTimeout(function () { showing = false; }, 1000);
   }
 
+  /**
+   * Rewarded ads.
+   *
+   * The game asks for a provider rather than calling the SDK itself, so the
+   * repo build carries no ad code and never shows a "Watch ad" button it
+   * cannot honour. Resolving true means watched to completion — their rules
+   * are explicit that a dismissed or failed ad rewards nothing.
+   */
+  function rewarded() {
+    return new Promise(function (resolve) {
+      if (typeof gdsdk === 'undefined' || typeof gdsdk.showAd !== 'function') return resolve(false);
+      window.__gdRewardWatched = false;
+      gdsdk.showAd('rewarded')
+        .then(function () { resolve(window.__gdRewardWatched === true); })
+        .catch(function () { resolve(false); });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    if (window.squashGame) window.squashGame.setRewardedAdProvider(rewarded);
+
+    // Preloading is recommended, and a rewarded ad that takes five seconds to
+    // appear after a deliberate tap reads as broken.
+    if (typeof gdsdk !== 'undefined' && typeof gdsdk.preloadAd === 'function') {
+      gdsdk.preloadAd('rewarded').catch(function () {});
+    }
+
     var play = document.getElementById('tourPlay');
     if (play) play.addEventListener('click', ad);
 

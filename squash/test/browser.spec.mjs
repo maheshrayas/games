@@ -389,6 +389,99 @@ test.describe('embedding contract', () => {
   });
 });
 
+// ── rewarded ads ──────────────────────────────────────────────────────────
+// A required GameDistribution checklist item, and the one place where getting
+// it wrong has consequences beyond a bug: rewarding a player for an ad they
+// did not watch is how a game gets pulled from a catalogue.
+test.describe('rewarded ads', () => {
+  /** Register a fake provider and record whether it was asked. */
+  /** Whatever is unlocked, as an array — the key is absent until something is. */
+  const unlocked = (page) => page.evaluate(() => {
+    try { return JSON.parse(localStorage.getItem('gc-unlocked') || '[]'); } catch { return []; }
+  });
+
+  const provide = (page, resolveWith) => page.evaluate((v) => {
+    window.__asked = 0;
+    window.squashGame.setRewardedAdProvider(() => {
+      window.__asked++;
+      return v === 'throw' ? Promise.reject(new Error('dismissed')) : Promise.resolve(v);
+    });
+  }, resolveWith);
+
+  test('offers nothing when no host provides ads', async ({ page }) => {
+    await open(page);
+    // The plain build — GitHub Pages, itch.io, self-hosted — has no ad
+    // provider, so tapping a locked court must do nothing at all rather than
+    // open a "Watch ad" dialog it could never honour.
+    await page.click('[data-theme="night"]');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#rewardDlg'),
+      'a reward was offered with no way to show an ad').not.toBeVisible();
+    expect(await unlocked(page), 'and nothing was unlocked for free').not.toContain('night');
+  });
+
+  test('a locked court offers an ad, and unlocks on a completed view', async ({ page }) => {
+    await open(page);
+    await provide(page, true);
+    // The mode menu is already open at startup and the court picker lives in
+    // it; it is modal, so clicking the button that opens it would be blocked.
+    await page.click('[data-theme="night"]');
+
+    await expect(page.locator('#rewardDlg')).toBeVisible();
+    await expect(page.locator('#rewardTitle')).toContainText('New court');
+    await page.click('#rewardWatch');
+
+    await expect.poll(() => unlocked(page)).toContain('night');
+    expect(await page.evaluate(() => window.__asked)).toBe(1);
+  });
+
+  test('an unwatched ad unlocks nothing', async ({ page }) => {
+    await open(page);
+    await provide(page, false);            // shown, but not watched through
+    await page.click('[data-theme="glass"]');
+    await page.click('#rewardWatch');
+    await page.waitForTimeout(400);
+
+    expect(await page.evaluate(() => window.__asked)).toBe(1);
+    expect(await unlocked(page),
+      'a reward was granted for an ad that was not completed').not.toContain('glass');
+  });
+
+  test('a dismissed ad unlocks nothing and shows no error', async ({ page }) => {
+    const errors = await open(page);
+    await provide(page, 'throw');
+    await page.click('[data-theme="glass"]');
+    await page.click('#rewardWatch');
+    await page.waitForTimeout(400);
+
+    expect(await unlocked(page)).not.toContain('glass');
+    expect(errors, 'a dismissed ad must not surface an error').toEqual([]);
+  });
+
+  test('No thanks closes without asking for an ad', async ({ page }) => {
+    await open(page);
+    await provide(page, true);
+    await page.click('[data-theme="night"]');
+    await page.click('#rewardNo');
+
+    await expect(page.locator('#rewardDlg')).not.toBeVisible();
+    expect(await page.evaluate(() => window.__asked)).toBe(0);
+  });
+
+  test('an unlocked court is remembered and applied', async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => {
+      localStorage.setItem('gc-unlocked', JSON.stringify(['night']));
+      localStorage.setItem('gc-theme', 'night');
+    });
+    await page.reload();
+    await page.waitForFunction(() => !!window.__squash?.state);
+    const line = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--line').trim());
+    expect(line.toLowerCase(), 'the Night court line colour should be applied').toBe('#e4634d');
+  });
+});
+
 // ── UI ────────────────────────────────────────────────────────────────────
 test.describe('interface', () => {
   test('choosing a mode starts that mode', async ({ page }) => {

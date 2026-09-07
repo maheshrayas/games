@@ -171,6 +171,36 @@ live rally.
 > Their SDK throws `document.browsingTopics() is deprecated` on current Chrome.
 > That is theirs, not ours, and it does not stop the game.
 
+### Rewarded ads
+
+A required GameDistribution checklist item, not just a revenue option. Their
+guide asks for "at least a couple" of placements and supplies six sample
+patterns; two of them fit squash honestly:
+
+- **Skip this round** — offered only after *losing* a tournament match, so it
+  never cheapens a win. Their "Skip Chapter" pattern.
+- **New court** — unlock the Glass or Night court. Their "New Theme" pattern.
+
+The other four samples assume coins, lives or daily rewards. This game has no
+economy, and inventing one purely to have something to sell would be the tail
+wagging the dog.
+
+The game never calls an ad SDK itself. A host registers a provider:
+
+```js
+window.squashGame.setRewardedAdProvider(() => Promise<boolean>);
+```
+
+Resolve **true only if the ad was watched to completion**. Until a host
+registers one, no reward is ever offered — which is why the plain build shows
+no "Watch ad" button it could not honour, and why a locked court simply does
+nothing there.
+
+Three tests guard the rule that matters: an unwatched ad, a dismissed ad, and a
+"No thanks" must each unlock nothing. Rewarding a player for an ad they did not
+watch is how a game gets pulled from a catalogue, so that one is verified by
+making the code grant unconditionally and confirming the test fails.
+
 ### The embedding API
 
 Any host page — theirs or yours — can drive the game:

@@ -108,6 +108,22 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
 .rung.next b{color:var(--accent)}
 .rung.locked{opacity:.5}
 #tourList{padding:0;margin:12px 0}
+/* Court themes */
+#themeRow{display:flex;gap:6px;margin-top:10px}
+#themeRow button{flex:1;padding:7px 4px;font-size:11.5px;display:flex;align-items:center;
+  justify-content:center;gap:5px}
+#themeRow button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+#themeRow button[data-locked]{opacity:.72}
+.swatch{width:11px;height:11px;border-radius:3px;border:1.5px solid;flex-shrink:0}
+/* Rewarded-ad offer: their samples are an icon, a line of copy, Watch Ads and
+   a plain No Thanks. Dressed as part of this game rather than a generic
+   ad prompt, because a popup that looks bolted on gets dismissed on sight. */
+#rewardDlg .dlg{text-align:center}
+.rewardIcon{font-size:34px;line-height:1;color:var(--accent);margin:2px 0 8px}
+#rewardBody{color:var(--ink-soft);font-size:13px;line-height:1.5;margin-bottom:16px}
+#rewardWatch{width:100%;padding:12px;font-size:14px}
+#rewardNo{background:none;border:0;color:var(--ink-soft);font-size:13px;padding:12px 0 2px;
+  text-decoration:underline;width:100%}
 
 /* Any screen wider than it is tall gets the court beside the controls rather
    than beneath them. Stacked, a 460px column on an 800x600 portal iframe left
@@ -200,6 +216,16 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
     <button data-mode="human"><b>2 Players</b><small>Same keyboard. WASD + Space against Arrows +
       Enter.</small></button>
   </div>
+  <h3 style="margin-top:16px">Court</h3>
+  <div id="themeRow"></div>
+</div></dialog>
+
+<dialog id="rewardDlg"><div class="dlg">
+  <div class="rewardIcon" id="rewardIcon">★</div>
+  <h2 id="rewardTitle">Reward</h2>
+  <p id="rewardBody"></p>
+  <button id="rewardWatch" class="primary">Watch ad</button>
+  <button id="rewardNo">No thanks</button>
 </div></dialog>
 
 <dialog id="tourDlg"><div class="dlg">
@@ -329,6 +355,12 @@ window.squashGame={
   resume(){ paused=false; },
   setMuted(v){ setMuted(!!v); },
   get paused(){ return paused; },
+  /**
+   * Register a way to show a rewarded ad: a function returning a Promise that
+   * resolves true only if the ad was watched through. Until a host calls this,
+   * no reward is ever offered — see offerReward.
+   */
+  setRewardedAdProvider(fn){ rewardProvider = typeof fn==='function' ? fn : null; renderThemes(); },
 };
 
 function newState(mode,tourRound){
@@ -449,6 +481,11 @@ let tour=loadTour();
 function finishTournamentMatch(won){
   const beaten=LADDER[S.tourRound];
   if(won && S.tourRound===tour.round){ tour.round++; saveTour(); }
+  // Losing is the moment their "Skip Chapter" pattern is actually welcome:
+  // offered only on a defeat, so it never cheapens a win.
+  if(!won && S.tourRound===tour.round && tour.round<LADDER.length
+     && offerReward({kind:'skip', title:'Skip this round', icon:'»',
+        body:`Stuck on ${beaten.name}? Watch a short ad to move up to the next round.`})) return;
   renderLadder(won?`You beat ${beaten.name}.`:`${beaten.name} takes the match. Have another go.`);
   $('tourDlg').showModal();
 }
@@ -473,6 +510,109 @@ function startTournamentMatch(){
   $('tourDlg').close();
   setBall(LADDER[i].ball);
   start(LADDER[i].cpu, i);
+}
+
+
+// ── court themes and rewards ───────────────────────────────────────────────
+// GameDistribution asks for "at least a couple" of rewarded-ad placements, and
+// their samples are the shape to follow: an opt-in popup with a clear reward
+// and a plain No Thanks. Two of their patterns fit squash honestly —
+// "Skip Chapter" (get past a round you keep losing) and "New Theme" (a court
+// you like the look of). The rest of their samples assume coins, lives or
+// daily rewards, none of which this game has, and inventing an economy just to
+// have something to sell would be the tail wagging the dog.
+//
+// Themes drive the same CSS variables the court already renders from, so
+// switching one costs nothing in the draw loop.
+const THEMES={
+  maple:{name:'Maple',   free:true,  wood:'#DFBE8E', dark:'#C9A473', line:'#B23A2E'},
+  glass:{name:'Glass',   free:false, wood:'#BFD6E4', dark:'#93B5C9', line:'#1F5E7A'},
+  night:{name:'Night',   free:false, wood:'#5A5142', dark:'#3B352B', line:'#E4634D'},
+};
+function loadUnlocked(){
+  try{ return new Set(JSON.parse(localStorage.getItem('gc-unlocked')||'[]')); }catch{ return new Set(); }
+}
+let unlocked=loadUnlocked();
+let courtTheme='maple';
+try{ const t=localStorage.getItem('gc-theme'); if(t&&THEMES[t]) courtTheme=t; }catch{}
+
+function themeAvailable(k){ return THEMES[k].free || unlocked.has(k); }
+
+function applyTheme(k){
+  if(!THEMES[k]||!themeAvailable(k)) return;
+  courtTheme=k;
+  const t=THEMES[k], r=document.documentElement.style;
+  r.setProperty('--wood',t.wood); r.setProperty('--wood-dk',t.dark); r.setProperty('--line',t.line);
+  try{ localStorage.setItem('gc-theme',k); }catch{}
+  renderThemes();
+}
+
+function unlockTheme(k){
+  unlocked.add(k);
+  try{ localStorage.setItem('gc-unlocked',JSON.stringify([...unlocked])); }catch{}
+  applyTheme(k);
+}
+
+function renderThemes(){
+  const row=$('themeRow'); if(!row) return;
+  row.innerHTML=Object.entries(THEMES).map(([k,t])=>{
+    const open=themeAvailable(k), on=k===courtTheme;
+    return `<button data-theme="${k}" aria-pressed="${on}" ${open?'':'data-locked="1"'}>
+      <i class="swatch" style="background:${t.wood};border-color:${t.line}"></i>${t.name}${open?'':' 🔒'}</button>`;
+  }).join('');
+  row.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.theme;
+    if(themeAvailable(k)) applyTheme(k);
+    else offerReward({
+      kind:'theme:'+k, title:'New court',
+      body:`Play on the ${THEMES[k].name} court. Watch a short ad to unlock it for good.`,
+      icon:'▧',
+    });
+  });
+}
+
+/**
+ * A host page may supply a way to show a rewarded ad. Without one — the plain
+ * build, GitHub Pages, anywhere self-hosted — no reward is ever offered, which
+ * is why the base game carries no ad code and shows no "Watch Ads" button that
+ * could not work.
+ *
+ * The provider resolves true only when the ad was watched to the end.
+ */
+let rewardProvider=null;
+let pendingReward=null;
+
+function offerReward({kind,title,body,icon}){
+  if(!rewardProvider) return false;
+  pendingReward=kind;
+  $('rewardIcon').textContent=icon||'★';
+  $('rewardTitle').textContent=title;
+  $('rewardBody').textContent=body;
+  $('rewardDlg').showModal();
+  return true;
+}
+
+function grantReward(kind){
+  if(!kind) return;
+  if(kind.startsWith('theme:')) unlockTheme(kind.slice(6));
+  else if(kind==='skip'){
+    if(tour.round<LADDER.length){ tour.round++; saveTour(); }
+    renderLadder('Round skipped. Next opponent is ready.');
+    $('tourDlg').showModal();
+  }
+}
+
+async function watchForReward(){
+  const kind=pendingReward; pendingReward=null;
+  $('rewardDlg').close();
+  if(!rewardProvider||!kind) return;
+  try{
+    const ok=await rewardProvider();
+    // Only on a completed view. A dismissed or failed ad rewards nothing —
+    // their rules are explicit, and rewarding on failure is how a game gets
+    // pulled from a catalogue.
+    if(ok) grantReward(kind);
+  }catch{ /* dismissed or unavailable: no reward, no error shown */ }
 }
 
 // ── serve setup ────────────────────────────────────────────────────────────
@@ -920,10 +1060,14 @@ document.querySelectorAll('[data-ball]').forEach(b=>b.onclick=()=>setBall(b.data
 
 $('serveBtn').onclick=()=>{if(!S)return;
   if(S.phase==='over')start(S.mode); else if(S.phase==='serve'&&(solo()||S.server===0||S.mode==='human'))serve();};
+$('rewardWatch').onclick=watchForReward;
+$('rewardNo').onclick=()=>{ pendingReward=null; $('rewardDlg').close();
+  // A refusal must land the player somewhere sensible, not a dead dialog.
+  if(S&&S.tourRound!=null&&S.phase==='over'){ renderLadder(); $('tourDlg').showModal(); } };
 $('muteBtn').onclick=()=>setMuted(!muted);
 $('menuBtn').onclick=()=>$('menuDlg').showModal();
 $('rulesBtn').onclick=()=>$('rulesDlg').showModal();
-for(const d of [$('menuDlg'),$('rulesDlg'),$('tourDlg')])
+for(const d of [$('menuDlg'),$('rulesDlg'),$('tourDlg'),$('rewardDlg')])
   d.addEventListener('click',e=>{if(e.target===d)d.close();});
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
   $('menuDlg').close();
@@ -947,7 +1091,7 @@ window.__squash={get state(){return S;},get ppm(){return PPM;},
                  get ladder(){return LADDER.map(o=>({...o}));},
                  get audioState(){return actx?actx.state:null;}};
 
-layout(); setMuted(muted); setBall(ballKey); start('cpu-easy');
+layout(); setMuted(muted); applyTheme(courtTheme); renderThemes(); setBall(ballKey); start('cpu-easy');
 // Re-fit on rotate, resize, and when the mobile address bar shows or hides.
 addEventListener('resize',layout);
 // A hidden tab should not keep playing: rAF is throttled there anyway, so the
