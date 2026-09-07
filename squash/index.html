@@ -300,7 +300,26 @@ function layout(){
 }
 const mx=x=>ox+x*PPM, my=y=>oy+y*PPM;
 
-let S=null, marks=[], keys={}, raf=0, last=0;
+let S=null, marks=[], keys={}, raf=0, last=0, paused=false;
+
+/**
+ * Embedding API for whatever page is hosting the game.
+ *
+ * Ad networks require a host to be able to stop the game and silence it while
+ * an ad plays — GameDistribution's SDK makes pausing AND muting mandatory on
+ * its SDK_GAME_PAUSE event. Keeping that as a plain host API rather than
+ * network-specific code means the base game stays free of any SDK, and each
+ * distribution build is a thin wrapper over this.
+ *
+ * It is also simply correct: a game that keeps simulating while a tab is
+ * hidden burns battery and comes back with the rally already lost.
+ */
+window.squashGame={
+  pause(){ paused=true; if(!muted) setMuted(true); },
+  resume(){ paused=false; },
+  setMuted(v){ setMuted(!!v); },
+  get paused(){ return paused; },
+};
 
 function newState(mode,tourRound){
   const cpu={'cpu-easy':{sp:3.6,react:.34,err:.30,reach:1.05},
@@ -782,16 +801,25 @@ function draw(){
 }
 
 // ── loop ───────────────────────────────────────────────────────────────────
+/**
+ * One step of the game. Split out of frame() so the headless tests can drive
+ * the real loop instead of a reimplementation of it — the earlier version had
+ * the tests calling stepPlayers/stepBall themselves and arranging the serve,
+ * which is precisely how a test came to pass on a game that was hung.
+ */
+function tick(dt){
+  if(!S || paused) return;
+  if(S.phase==='rally'||S.phase==='serve'){stepPlayers(dt); stepBall(dt);}
+  if(S.phase==='dead'){S.deadT-=dt; if(S.deadT<=0) setupServe();}
+  if(S.phase==='serve'&&S.autoServe>0){S.autoServe-=dt; if(S.autoServe<=0) serve();}
+  for(let i=marks.length-1;i>=0;i--){marks[i].t-=dt*.22; if(marks[i].t<=0)marks.splice(i,1);}
+  if(marks.length>26) marks.splice(0,marks.length-26);
+}
+
 function frame(t){
   const dt=Math.min(.033,(t-last)/1000||0); last=t;
-  if(S){
-    if(S.phase==='rally'||S.phase==='serve'){stepPlayers(dt); stepBall(dt);}
-    if(S.phase==='dead'){S.deadT-=dt; if(S.deadT<=0) setupServe();}
-    if(S.phase==='serve'&&S.autoServe>0){S.autoServe-=dt; if(S.autoServe<=0) serve();}
-    for(let i=marks.length-1;i>=0;i--){marks[i].t-=dt*.22; if(marks[i].t<=0)marks.splice(i,1);}
-    if(marks.length>26) marks.splice(0,marks.length-26);
-    draw(); sync();
-  }
+  tick(dt);
+  if(S){ draw(); sync(); }
   raf=requestAnimationFrame(frame);
 }
 
@@ -912,5 +940,8 @@ window.__squash={get state(){return S;},get ppm(){return PPM;},
 layout(); setMuted(muted); setBall(ballKey); start('cpu-easy');
 // Re-fit on rotate, resize, and when the mobile address bar shows or hides.
 addEventListener('resize',layout);
+// A hidden tab should not keep playing: rAF is throttled there anyway, so the
+// rally resumes mid-flight with the ball somewhere unexpected.
+addEventListener('visibilitychange',()=>{ if(document.hidden) paused=true; });
 addEventListener('orientationchange',()=>setTimeout(layout,120)); $('menuDlg').showModal(); raf=requestAnimationFrame(frame);
 </script>

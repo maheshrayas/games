@@ -44,12 +44,17 @@ const elStub = new Proxy({}, {
   },
   set: () => true,
 });
-const doc = { getElementById: () => elStub, querySelectorAll: () => [], addEventListener: noop };
+const doc = { getElementById: () => elStub, querySelectorAll: () => [], addEventListener: noop, hidden: false };
+// The game legitimately reaches for `window` — devicePixelRatio when sizing the
+// canvas, AudioContext for sound, and to hang its host-facing pause API on.
+const win = { devicePixelRatio: 1, AudioContext: undefined, addEventListener: noop };
 
 const api = new Function(
-  'document', 'getComputedStyle', 'requestAnimationFrame', 'addEventListener', 'performance',
-  js + '; return {setupServe,serve,stepPlayers,stepBall,swing,cpuSwing,draw,start,keys,get S(){return S;}};',
-)(doc, () => ({ getPropertyValue: () => '#000' }), noop, noop, { now: () => 0 });
+  'document', 'getComputedStyle', 'requestAnimationFrame', 'addEventListener', 'performance', 'window',
+  js + '; return {setupServe,serve,tick,stepPlayers,stepBall,swing,cpuSwing,draw,start,keys,'
+     + 'pause:()=>window.squashGame.pause(),resume:()=>window.squashGame.resume(),'
+     + 'get paused(){return paused;},get S(){return S;}};',
+)(doc, () => ({ getPropertyValue: () => '#000' }), noop, noop, { now: () => 0 }, win);
 
 const FRAMES = 4000;
 let failed = 0;
@@ -61,22 +66,17 @@ for (const mode of ['practice', 'cpu-easy', 'cpu-med', 'cpu-hard', 'human']) {
     const dt = 1 / 60;
     for (let f = 0; f < FRAMES; f++) {
       const S = api.S;
-      // Mirror frame()'s state machine rather than forcing a serve every
-      // rally — forcing it is what hid the CPU never serving at all.
-      if (S.phase === 'dead') { S.deadT -= dt; if (S.deadT <= 0) api.setupServe(); }
-      if (S.phase === 'serve' && S.autoServe > 0) {
-        S.autoServe -= dt;
-        if (S.autoServe <= 0) api.serve();
-      } else if (S.phase === 'serve') {
-        // A human would press Space here — but only when it is their serve.
+      // The only thing a test supplies is the keypress a player would make.
+      // Everything else — the dead pause, the CPU's serve, the stepping — is
+      // the game's own loop, driven through tick().
+      if (S.phase === 'serve' && S.autoServe === 0) {
         const mine = mode === 'practice' || mode === 'human' || S.server === 0;
         if (mine) api.serve();
       }
       if (S.phase === 'serve') { stall++; worstStall = Math.max(worstStall, stall); }
       else stall = 0;
 
-      api.stepPlayers(dt);
-      api.stepBall(dt);
+      api.tick(dt);
       api.draw();
       if (S.phase === 'dead' && !wasDead) rallies++;   // count transitions, not frames
       wasDead = S.phase === 'dead';
@@ -127,6 +127,31 @@ for (const [mode, key, who, want, label] of controls) {
   const got = movesOn(mode, key, who);
   if (got === want) console.log(`ok   ${label}`);
   else { console.log(`FAIL ${label} (expected ${want}, got ${got})`); failed++; }
+}
+
+// ── pause ──────────────────────────────────────────────────────────────────
+// GameDistribution's SDK makes pausing AND muting mandatory while an ad plays,
+// so a pause that does not actually stop the simulation is a broken
+// integration, not a cosmetic bug.
+{
+  api.start('cpu-easy');
+  api.serve();
+  for (let f = 0; f < 30; f++) { api.stepPlayers(1 / 60); api.stepBall(1 / 60); }
+
+  api.pause();
+  const frozen = { ...api.S.B };
+  // Two seconds of real ticks. tick() itself must refuse to advance.
+  for (let f = 0; f < 120; f++) api.tick(1 / 60);
+  const same = api.S.B.x === frozen.x && api.S.B.y === frozen.y && api.S.B.z === frozen.z;
+  if (same) console.log('ok   pause stops the simulation');
+  else { console.log('FAIL the ball kept moving while paused'); failed++; }
+
+  api.resume();
+  for (let f = 0; f < 30; f++) api.tick(1 / 60);
+  const moved = api.S.B.x !== frozen.x || api.S.B.y !== frozen.y || api.S.B.z !== frozen.z;
+  if (moved) console.log('ok   the game runs again after resume');
+  else { console.log('FAIL nothing moved after resume'); failed++; }
+
 }
 
 process.exit(failed ? 1 : 0);

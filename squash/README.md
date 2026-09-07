@@ -121,6 +121,49 @@ Height is `100dvh`, not `100vh`: on mobile Safari `vh` refers to the *largest*
 viewport, so a `100vh` column sits underneath the address bar and scrolls
 anyway.
 
+## Publishing to GameDistribution
+
+```bash
+npm run build:gd -- --game-id=<your GD game id>
+# -> squash/dist/gamedistribution/index.html   (git-ignored; rebuild, don't edit)
+```
+
+Zip that directory and upload it in the GameDistribution developer portal. The
+game id comes from the portal after you create the game entry; the build refuses
+to run without one, because an SDK with no id loads happily and reports nothing,
+which looks like it is working while earning nothing.
+
+The distributed build is **generated from `index.html`**, never maintained
+alongside it, so it cannot drift from the version the tests cover. The repo's
+own copy stays a single self-contained file with no third-party scripts — that
+is what makes it hostable anywhere and honest to read. Only the uploaded copy
+carries their SDK.
+
+Integration follows [their SDK guide](https://github.com/GameDistribution/GD-HTML5/wiki):
+`GD_OPTIONS` with an `onEvent` handler, **pause *and* mute** on `SDK_GAME_PAUSE`
+(both are mandatory), resume on `SDK_GAME_START`, and `showAd()` only ever from
+a user click. The two ad placements are the pauses a squash match already has —
+before a tournament match, and between games within one. Nothing interrupts a
+live rally.
+
+> Their SDK throws `document.browsingTopics() is deprecated` on current Chrome.
+> That is theirs, not ours, and it does not stop the game.
+
+### The embedding API
+
+Any host page — theirs or yours — can drive the game:
+
+```js
+window.squashGame.pause();      // stops the simulation AND mutes
+window.squashGame.resume();
+window.squashGame.setMuted(true);
+window.squashGame.paused;       // boolean
+```
+
+`pause()` muting as well as stopping is deliberate: ad networks require it, and
+a rally continuing audibly under an ad is the fastest way to be dropped from a
+catalogue. The suite has a test that fails if pause ever stops muting.
+
 ## Controls
 
 - **Player 1** — `WASD` to move, `Space` to hit (hold it to lob)

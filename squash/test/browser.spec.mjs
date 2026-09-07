@@ -335,6 +335,51 @@ test.describe('tournament', () => {
   });
 });
 
+// ── the contract a distribution build depends on ──────────────────────────
+// build-gd.mjs injects an SDK that pauses the game, mutes it, and hangs ad
+// breaks off specific elements. Rename any of these in the game and that build
+// breaks silently — it would still load, still play, and simply never pause for
+// an ad or never earn anything.
+test.describe('embedding contract', () => {
+  test('exposes pause, resume and setMuted to a host page', async ({ page }) => {
+    await open(page);
+    await choose(page, 'cpu-easy');
+    const api = await page.evaluate(() => Object.keys(window.squashGame || {}));
+    for (const k of ['pause', 'resume', 'setMuted', 'paused']) expect(api).toContain(k);
+  });
+
+  test('pause stops play and mutes, as ad networks require', async ({ page }) => {
+    await open(page);
+    await choose(page, 'cpu-easy');
+    await page.click('#serveBtn');
+    await page.waitForTimeout(400);
+
+    await page.evaluate(() => window.squashGame.pause());
+    const a = await page.evaluate(() => ({ ...window.__squash.state.B }));
+    await page.waitForTimeout(600);
+    const b = await page.evaluate(() => ({ ...window.__squash.state.B }));
+
+    expect(b, 'the ball moved while paused').toEqual(a);
+    expect(await page.evaluate(() => window.__squash.muted),
+      'pausing must mute too — GameDistribution requires it').toBe(true);
+
+    await page.evaluate(() => window.squashGame.resume());
+    await page.waitForTimeout(500);
+    const c = await page.evaluate(() => ({ ...window.__squash.state.B }));
+    expect(c, 'the game did not restart after resume').not.toEqual(b);
+  });
+
+  test('the elements ad breaks hang off still exist', async ({ page }) => {
+    await open(page);
+    await page.click('[data-mode="tournament"]');
+    await expect(page.locator('#tourPlay')).toBeVisible();
+    await page.click('#tourPlay');
+    await expect(page.locator('#serveBtn')).toBeVisible();
+    // The between-games break is triggered by gameNo advancing.
+    expect(await page.evaluate(() => typeof window.__squash.state.gameNo)).toBe('number');
+  });
+});
+
 // ── UI ────────────────────────────────────────────────────────────────────
 test.describe('interface', () => {
   test('choosing a mode starts that mode', async ({ page }) => {
