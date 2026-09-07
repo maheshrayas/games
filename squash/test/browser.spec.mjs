@@ -28,11 +28,32 @@ const GAME = process.env.GAME_URL || pathToFileURL(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'index.html'),
 ).href;
 
+/**
+ * Errors from third-party code we ship but do not control.
+ *
+ * Deliberately a narrow list of exact known issues, not a pattern that
+ * swallows anything from a vendor: the point of these assertions is to catch
+ * OUR mistakes, and a blanket filter would have hidden the CPU-swing crash
+ * just as effectively as having no test at all.
+ *
+ * - browsingTopics: GameDistribution's SDK calls document.browsingTopics(),
+ *   which Chrome has removed. Fires on every load of a distribution build and
+ *   is harmless — the game plays through it.
+ * - sandboxed about:blank: the ad container creates sandboxed iframes without
+ *   allow-scripts. The game creates no iframes at all, so this can only come
+ *   from the ad stack.
+ */
+const THIRD_PARTY_NOISE = [
+  /browsingTopics/,
+  /Blocked script execution in 'about:blank'/,
+];
+
 /** Load the game and fail the test on any console error or uncaught throw. */
 async function open(page, { viewport } = {}) {
   const errors = [];
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  page.on('pageerror', (e) => errors.push(`${e.name}: ${e.message}`));
+  const ours = (t) => !THIRD_PARTY_NOISE.some((re) => re.test(t));
+  page.on('console', (m) => m.type() === 'error' && ours(m.text()) && errors.push(m.text()));
+  page.on('pageerror', (e) => ours(e.message) && errors.push(`${e.name}: ${e.message}`));
   if (viewport) await page.setViewportSize(viewport);
   await page.goto(GAME);
   await page.waitForFunction(() => !!window.__squash?.state);
@@ -410,6 +431,11 @@ test.describe('rewarded ads', () => {
 
   test('offers nothing when no host provides ads', async ({ page }) => {
     await open(page);
+    // A distribution build registers a provider on load, and offering a reward
+    // is then the correct behaviour — this asserts the *plain* build's
+    // contract, so it does not apply there.
+    test.skip(await page.evaluate(() => !!window.gdsdk),
+      'a distribution build supplies an ad provider by design');
     // The plain build — GitHub Pages, itch.io, self-hosted — has no ad
     // provider, so tapping a locked court must do nothing at all rather than
     // open a "Watch ad" dialog it could never honour.
