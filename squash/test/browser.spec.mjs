@@ -71,6 +71,9 @@ test.describe('fits the screen', () => {
     { name: 'phone landscape', width: 844, height: 390 },
     { name: 'tablet',          width: 768, height: 1024 },
     { name: 'desktop',         width: 1280, height: 800 },
+    // The size GameDistribution's catalogue embeds at, and the one the game
+    // was worst at: a 460px column in 800px, court squeezed to 269px tall.
+    { name: 'portal iframe',   width: 800,  height: 600 },
   ];
   for (const { name, width, height } of sizes) {
     test(`no vertical scrollbar on ${name} (${width}x${height})`, async ({ page }) => {
@@ -103,6 +106,12 @@ test.describe('fits the screen', () => {
       expect(box.y + box.height).toBeLessThanOrEqual(height + 1);
       expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
       expect(box.height, 'court collapsed to nothing').toBeGreaterThan(80);
+
+      // Not just "fits" — a court squashed into a corner of the frame is a bad
+      // showing in a catalogue even when nothing overflows.
+      const used = box.width / width;
+      expect(used, `only ${Math.round(used * 100)}% of the width is used`)
+        .toBeGreaterThan(0.4);
     });
   }
 });

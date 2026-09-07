@@ -109,13 +109,16 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
 .rung.locked{opacity:.5}
 #tourList{padding:0;margin:12px 0}
 
-/* A landscape phone has height to spare nowhere and width to spare everywhere.
-   Stacked, the chrome left the court about 59px tall — inside the viewport but
-   far too small to play. Side by side, the court gets the full height and the
-   controls take the width that was going unused. */
-@media (orientation:landscape) and (max-height:560px){
-  .stage{max-width:none;display:grid;gap:8px;
-    grid-template-columns:1fr minmax(190px,250px);
+/* Any screen wider than it is tall gets the court beside the controls rather
+   than beneath them. Stacked, a 460px column on an 800x600 portal iframe left
+   43% of the width empty and squeezed the court to 269px tall; a squash court
+   is a tall shape, so height is the scarce dimension and width is the one
+   going begging. Keyed on aspect ratio rather than a height threshold, because
+   the old (max-height:560px) rule missed 800x600 entirely — which is exactly
+   the size the game gets embedded at. */
+@media (min-aspect-ratio: 1/1) and (min-width: 640px){
+  .stage{max-width:1000px;display:grid;gap:8px;
+    grid-template-columns:1fr minmax(200px,280px);
     grid-template-rows:auto auto auto auto 1fr auto;
     grid-template-areas:
       "court head"
@@ -126,15 +129,22 @@ kbd{font-family:"IBM Plex Sans",monospace;font-size:10.5px;background:var(--grou
       "court hint";}
   .courtwrap{grid-area:court}
   .head{grid-area:head}
-  .board{grid-area:board;padding:5px 10px}
+  .board{grid-area:board}
   .ballsel{grid-area:ballsel}
   .status{grid-area:status}
   .row{grid-area:controls;align-self:start}
   .hint{grid-area:hint}
-  h1{font-size:18px}
-  .sub{display:none}          /* the tagline is the first thing to go */
-  .pts{font-size:26px}
 }
+
+/* Separately: a short screen needs the chrome itself trimmed, whatever the
+   layout. The tagline is the first thing to go. */
+@media (max-height:560px){
+  h1{font-size:18px}
+  .sub{display:none}
+  .pts{font-size:26px}
+  .board{padding:5px 10px}
+}
+
 </style>
 
 <div class="stage">
