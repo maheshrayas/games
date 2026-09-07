@@ -20,6 +20,7 @@
  *   - gdsdk.showAd()  -> only ever from a user input event
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -116,5 +117,16 @@ const dir = join(here, 'dist', 'gamedistribution');
 mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, 'index.html'), out);
 
-console.log(`Built squash/dist/gamedistribution/index.html  (gameId ${gameId})`);
-console.log('Zip that directory and upload it to the GameDistribution portal.');
+// Zipped here rather than left as a manual step: the archive must have
+// index.html at its root, and a zip of the *folder* (so every path is
+// prefixed `gamedistribution/`) is rejected on upload.
+const zip = join(here, 'dist', 'squash-gamedistribution.zip');
+try {
+  execFileSync('zip', ['-j', '-q', '-FS', zip, join(dir, 'index.html')]);
+  console.log(`Built ${zip}`);
+} catch {
+  console.log(`Built ${join(dir, 'index.html')} — zip unavailable, archive it yourself`);
+  console.log('index.html must sit at the ROOT of the archive, not inside a folder.');
+}
+console.log(`gameId ${gameId}`);
+console.log('Upload the zip in the GameDistribution developer portal, UPLOAD tab.');

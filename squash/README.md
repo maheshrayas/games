@@ -121,6 +121,28 @@ Height is `100dvh`, not `100vh`: on mobile Safari `vh` refers to the *largest*
 viewport, so a `100vh` column sits underneath the address bar and scrolls
 anyway.
 
+## Portal thumbnails
+
+```bash
+npm run thumbs     # -> squash/dist/thumbnails/*.jpg
+```
+
+One SVG scene rendered into each required aspect using SVG's own "cover"
+(`preserveAspectRatio="… slice"`), so the 5:3 strip and the 1:1 square are crops
+of the same artwork rather than four drawings to keep in sync. Rendered at 2×
+and downscaled through ImageMagick, because these are judged at 200×120 in a
+catalogue grid where 1× type goes to mush.
+
+Two things the small tile taught, both of which only appear once you look at it:
+
+- The court and the front wall must share one geometry. Drawn as two separate
+  rectangles they read as a diagram; with the wall rising from the court's far
+  edge it reads as a room.
+- A 200×120 tile has a wide *aspect* but is not a wide *canvas*. Given the
+  side-by-side treatment its title was capped at 92px while the word measured
+  124px, and clipped. Small tiles get the centred layout and a size derived from
+  the width they actually have.
+
 ## Publishing to GameDistribution
 
 ```bash

@@ -9,6 +9,7 @@
     "test": "node squash/test/simulate.mjs && playwright test",
     "test:sim": "node squash/test/simulate.mjs",
     "test:browser": "playwright test",
-    "build:gd": "node squash/build-gd.mjs"
+    "build:gd": "node squash/build-gd.mjs",
+    "thumbs": "node squash/tools/thumbnails.mjs"
   }
 }
